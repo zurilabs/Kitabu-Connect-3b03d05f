@@ -53,6 +53,8 @@ interface SwapRequest {
     status: string;
     offeredBookTitle: string;
     offeredBookPhotoUrl: string | null;
+    requesterConfirmed?: boolean | null;
+    ownerConfirmed?: boolean | null;
     createdAt: string;
     updatedAt: string;
   };

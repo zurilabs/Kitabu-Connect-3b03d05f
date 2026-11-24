@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request, Response } from "express";
 import { authenticateToken, requireAdmin } from "../middleware/auth.middleware";
 import { booklistService } from "../services/booklist.service";
 import {
@@ -20,7 +21,7 @@ const router = Router();
  * Create (or reuse) a school booklist for a grade and year, optionally with items.
  * Body: { schoolId, grade, year, source?, items?: [...] }
  */
-router.post("/", authenticateToken, requireAdmin, async (req, res) => {
+router.post("/", authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const validation = createBooklistSchema.safeParse(req.body);
     if (!validation.success) {
@@ -39,7 +40,7 @@ router.post("/", authenticateToken, requireAdmin, async (req, res) => {
  * POST /api/booklists/:id/items
  * Bulk add items (JSON array) to a booklist. Body: { items: [...] }
  */
-router.post("/:id/items", authenticateToken, requireAdmin, async (req, res) => {
+router.post("/:id/items", authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const booklistId = parseInt(req.params.id);
     if (isNaN(booklistId)) return res.status(400).json({ message: "Invalid booklist ID" });
@@ -65,7 +66,7 @@ router.post("/:id/items", authenticateToken, requireAdmin, async (req, res) => {
  * GET /api/booklists?schoolId=&grade=&year=
  * List booklists (with items).
  */
-router.get("/", authenticateToken, async (req, res) => {
+router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const year = req.query.year ? parseInt(req.query.year as string) : undefined;
     const booklists = await booklistService.listBooklists({
@@ -86,7 +87,7 @@ router.get("/", authenticateToken, async (req, res) => {
  * (same school first, then same grade elsewhere) and the next collection day.
  * Also builds the child slot's wishlist from the booklist (idempotent).
  */
-router.get("/child/:childId", authenticateToken, async (req, res) => {
+router.get("/child/:childId", authenticateToken, async (req: Request, res: Response) => {
   try {
     const childId = parseInt(req.params.childId);
     if (isNaN(childId)) return res.status(400).json({ message: "Invalid child ID" });
@@ -114,7 +115,7 @@ export const collectionDaysRouter = Router();
  * POST /api/collection-days   (admin only)
  * Body: { schoolId, date: "YYYY-MM-DD", startTime: "HH:MM", endTime: "HH:MM", venueNote?, status? }
  */
-collectionDaysRouter.post("/", authenticateToken, requireAdmin, async (req, res) => {
+collectionDaysRouter.post("/", authenticateToken, requireAdmin, async (req: Request, res: Response) => {
   try {
     const validation = createCollectionDaySchema.safeParse(req.body);
     if (!validation.success) {
@@ -133,7 +134,7 @@ collectionDaysRouter.post("/", authenticateToken, requireAdmin, async (req, res)
  * GET /api/collection-days?schoolId=
  * Upcoming collection days (today or later, not cancelled).
  */
-collectionDaysRouter.get("/", authenticateToken, async (req, res) => {
+collectionDaysRouter.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
     const days = await booklistService.listUpcomingCollectionDays(
       (req.query.schoolId as string) || undefined
