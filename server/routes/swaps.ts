@@ -170,6 +170,7 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
       : undefined;
 
     // A client-supplied collection day must exist, belong to the listing's school and not be cancelled.
+    let chosenCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = null;
     if (collectionDayId !== undefined) {
       const swapResult = await swapRequestService.getSwapRequestById(swapRequestId, userId);
       const listingId = swapResult.success ? swapResult.swapRequest?.swapRequest.requestedListingId : undefined;
@@ -179,10 +180,12 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
         listing?.schoolId ?? null
       );
       if (dayError) return res.status(422).json({ message: dayError });
+      const upcoming = await booklistService.listUpcomingCollectionDays(listing?.schoolId ?? undefined);
+      chosenCollectionDay = upcoming.find((d) => d.id === collectionDayId) ?? null;
     }
 
     // Pilot mode (adr-016): record the handover at the next collection day of the book's school
-    let pilotCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = null;
+    let pilotCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = chosenCollectionDay;
     if (isPilotMode() && collectionDayId === undefined) {
       try {
         const swapResult = await swapRequestService.getSwapRequestById(swapRequestId, userId);

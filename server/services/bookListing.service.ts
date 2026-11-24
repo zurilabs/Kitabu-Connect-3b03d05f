@@ -21,9 +21,11 @@ class BookListingService {
       delete (listingData as { schoolId?: string | null }).schoolId;
 
       // Create the book listing
+      // price is NOT NULL in the table; swap listings may omit it, so default to 0.
       const [listing] = await db.insert(bookListings).values({
         sellerId,
         ...listingData,
+        price: String(listingData.price ?? 0),
         schoolId,
       });
 
