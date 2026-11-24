@@ -1,3 +1,7 @@
+-- RUN ONCE. Check information_schema first (columns/indexes below may already exist), and
+-- confirm the charset/collation of schools and users with SHOW CREATE TABLE before applying so
+-- the new foreign keys match. Do not switch these statements to IF NOT EXISTS: a partial earlier
+-- run should be inspected, not silently skipped.
 -- Migration: Pilot consent and child slots
 -- Date: 2026-11-24
 -- ADR: adr-016 (school-cluster pilot)

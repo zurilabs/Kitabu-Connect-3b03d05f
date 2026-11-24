@@ -22,9 +22,11 @@ import {
   tierForListing,
   titleSimilarity,
   canonicalGrade,
+  dedupeBooklistItems,
 } from "../server/pilot/matching";
+import { isRealDate, isTodayOrFuture } from "../server/pilot/dates";
 import { checkListingForPilot, suggestedUsedPrice } from "../server/pilot/listingRules";
-import { consentRequirementError, hasValidConsent } from "../server/pilot/consent";
+import { consentRequirementError, hasCurrentConsent, hasValidConsent } from "../server/pilot/consent";
 import { childSlotLabel, toChildSlot } from "../server/pilot/childSlot";
 import { buildWhatsAppShareUrl } from "../client/src/lib/whatsapp";
 
@@ -178,7 +180,7 @@ test("written_in = true is rejected in pilot mode with a reason", () => {
   const result = checkListingForPilot({ writtenIn: true }, true);
   assert.equal(result.ok, false);
   assert.equal(result.code, "WRITTEN_IN_BLOCKED");
-  assert.match(result.message ?? "", /writing/i);
+  assert.match(result.message ?? "", /written-in/i);
 });
 test("written_in = false, or unset, is accepted in pilot mode", () => {
   assert.equal(checkListingForPilot({ writtenIn: false }, true).ok, true);
@@ -243,4 +245,35 @@ test("share URL is wa.me, url-encoded, with the listing URL and no personal data
   assert.ok(text.includes("Maths & Science"));
 });
 
-console.log(`\n${passed} checks passed`);
+console.log("Item dedupe, dates, consent version");
+test("booklist items dedupe by isbn, else by normalised title", () => {
+  const out = dedupeBooklistItems([
+    { title: "Maths Grade 5", isbn: "978-1-23456-789-7" },
+    { title: "Other title", isbn: "9781234567897" },
+    { title: "English  Activities!", isbn: null },
+    { title: "english activities", isbn: null },
+  ]);
+  assert.equal(out.length, 2);
+  assert.equal(dedupeBooklistItems([{ title: "English Activities" }], ["title:english activities"]).length, 0);
+});
+test("collection day dates must be real and not in the past", () => {
+  assert.equal(isRealDate("2027-02-31"), false);
+  assert.equal(isRealDate("2027-13-01"), false);
+  assert.equal(isRealDate("2027-02-28"), true);
+  const now = new Date("2026-11-24T10:00:00Z");
+  assert.equal(isTodayOrFuture("2026-11-23", now), false);
+  assert.equal(isTodayOrFuture("2026-11-24", now), true);
+});
+test("consent from an older notice version is not current", () => {
+  const given = { consentGivenAt: new Date("2026-11-01"), consentWithdrawnAt: null };
+  assert.equal(hasCurrentConsent({ ...given, consentVersion: "v1" }, "v2"), false);
+  assert.equal(hasCurrentConsent({ ...given, consentVersion: "v2" }, "v2"), true);
+  assert.equal(hasCurrentConsent({ consentVersion: "v2" }, "v2"), false);
+});
+test("written-in message explains reuse", () => {
+  const r = checkListingForPilot({ writtenIn: true }, true);
+  assert.ok(r.message?.includes("next family cannot reuse"));
+});
+
+console.log(`
+${passed} checks passed`);

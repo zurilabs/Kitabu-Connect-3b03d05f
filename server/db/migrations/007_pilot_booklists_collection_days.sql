@@ -1,3 +1,7 @@
+-- RUN ONCE. Check information_schema first (columns/indexes below may already exist), and
+-- confirm the charset/collation of schools and users with SHOW CREATE TABLE before applying so
+-- the new foreign keys match. Do not switch these statements to IF NOT EXISTS: a partial earlier
+-- run should be inspected, not silently skipped.
 -- Migration: School booklists, collection days, listing flags
 -- Date: 2026-11-24
 -- ADR: adr-016 (school-cluster pilot)
@@ -67,13 +71,14 @@ ALTER TABLE book_listings
   ADD CONSTRAINT fk_book_listings_school FOREIGN KEY (school_id) REFERENCES schools(id) ON DELETE SET NULL;
 
 ALTER TABLE wishlist_items
-  ADD COLUMN booklist_item_id INT NULL DEFAULT NULL;
+  ADD COLUMN booklist_item_id INT NULL DEFAULT NULL,
+  ADD UNIQUE KEY uq_wishlist_child_booklist_item (child_id, booklist_item_id);
 
 ALTER TABLE swap_requests
   ADD COLUMN collection_day_id INT NULL DEFAULT NULL;
 
 -- Rollback (manual):
 --   ALTER TABLE swap_requests DROP COLUMN collection_day_id;
---   ALTER TABLE wishlist_items DROP COLUMN booklist_item_id;
+--   ALTER TABLE wishlist_items DROP INDEX uq_wishlist_child_booklist_item, DROP COLUMN booklist_item_id;
 --   ALTER TABLE book_listings DROP FOREIGN KEY fk_book_listings_school, DROP COLUMN school_id, DROP COLUMN written_in;
 --   DROP TABLE collection_days; DROP TABLE school_booklist_items; DROP TABLE school_booklists;

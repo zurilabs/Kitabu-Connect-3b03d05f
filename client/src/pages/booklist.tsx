@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { ConsentBanner } from "@/components/pilot/ConsentBanner";
+import { isConsentRequiredError, throwForFailedResponse } from "@/lib/consentError";
 import { Link } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,13 +75,13 @@ export default function BooklistPage() {
     queryKey: ["booklist", activeChild?.id, BOOKLIST_YEAR],
     enabled: !!activeChild,
     queryFn: async () => {
-      const response = await fetch(`/api/booklists/child/${activeChild!.id}?year=${BOOKLIST_YEAR}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.message || "Failed to load the booklist");
-      }
+      const base = `/api/booklists/child/${activeChild!.id}`;
+      const query = `?year=${BOOKLIST_YEAR}`;
+      // The view is read-only. Build the wishlist once (idempotent), then fetch the view.
+      const build = await fetch(`${base}/build${query}`, { method: "POST", credentials: "include" });
+      if (!build.ok) await throwForFailedResponse(build, "Failed to prepare the booklist");
+      const response = await fetch(`${base}${query}`, { credentials: "include" });
+      if (!response.ok) await throwForFailedResponse(response, "Failed to load the booklist");
       return response.json();
     },
     staleTime: 60 * 1000,
@@ -142,7 +144,9 @@ export default function BooklistPage() {
 
       {isLoading && <div className="text-center py-8 text-muted-foreground">Loading the booklist...</div>}
 
-      {error && (
+      {error && isConsentRequiredError(error) && <ConsentBanner force />}
+
+      {error && !isConsentRequiredError(error) && (
         <Card>
           <CardContent className="py-6 text-sm text-destructive">{(error as Error).message}</CardContent>
         </Card>

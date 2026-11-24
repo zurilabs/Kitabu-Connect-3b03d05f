@@ -80,6 +80,29 @@ export function normalizeGrade(g: string | null | undefined): string {
   return canonicalGrade(g).toLowerCase();
 }
 
+/** Dedupe key for a booklist item: ISBN when present, else the title with punctuation and case removed. */
+export function booklistItemKey(item: { isbn?: string | null; title: string }): string {
+  const isbn = normalizeIsbn(item.isbn);
+  if (isbn) return `isbn:${isbn}`;
+  return `title:${item.title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`;
+}
+
+/** Drop items whose key was already seen (in `existingKeys` or earlier in the list). First one wins. */
+export function dedupeBooklistItems<T extends { isbn?: string | null; title: string }>(
+  items: T[],
+  existingKeys: Iterable<string> = []
+): T[] {
+  const seen = new Set<string>(existingKeys);
+  const out: T[] = [];
+  for (const item of items) {
+    const key = booklistItemKey(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
 export function normalizeIsbn(isbn: string | null | undefined): string {
   return (isbn ?? "").replace(/[\s-]/g, "").toUpperCase();
 }

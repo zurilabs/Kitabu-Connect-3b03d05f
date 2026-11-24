@@ -11,10 +11,12 @@ import {
   int,
   text,
   index,
+  uniqueIndex,
   unique,
 } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { isRealDate, isTodayOrFuture } from "../../pilot/dates";
 
 /* ================================
    USERS
@@ -198,6 +200,8 @@ export const wishlistItems = mysqlTable(
     statusIdx: index("idx_wishlist_items_status").on(t.status),
     gradeSubjectIdx: index("idx_wishlist_items_grade_subject").on(t.grade, t.subject),
     titleIdx: index("idx_wishlist_items_title").on(t.title),
+    // One wishlist item per child per booklist item (NULL booklist_item_id rows are not constrained).
+    childBooklistItemUq: uniqueIndex("uq_wishlist_child_booklist_item").on(t.childId, t.booklistItemId),
   })
 );
 
@@ -2133,7 +2137,11 @@ export const bulkAddBooklistItemsSchema = z.object({
 export const createCollectionDaySchema = z
   .object({
     schoolId: z.string().min(1, "School is required"),
-    date: z.string().regex(YMD, "Date must be YYYY-MM-DD"),
+    date: z
+      .string()
+      .regex(YMD, "Date must be YYYY-MM-DD")
+      .refine(isRealDate, "Date is not a real calendar date")
+      .refine((d) => isTodayOrFuture(d), "Collection day cannot be in the past"),
     startTime: z.string().regex(HHMM, "Start time must be HH:MM"),
     endTime: z.string().regex(HHMM, "End time must be HH:MM"),
     venueNote: z.string().max(1000).optional().nullable(),
@@ -2144,6 +2152,21 @@ export const createCollectionDaySchema = z
     path: ["endTime"],
   });
 
+/** Admin edit of a collection day: status, time or venue (e.g. cancel a day). */
+export const updateCollectionDaySchema = z
+  .object({
+    status: z.enum(["scheduled", "completed", "cancelled"]).optional(),
+    startTime: z.string().regex(HHMM, "Start time must be HH:MM").optional(),
+    endTime: z.string().regex(HHMM, "End time must be HH:MM").optional(),
+    venueNote: z.string().max(1000).optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: "Nothing to update" })
+  .refine((d) => !(d.startTime && d.endTime) || d.endTime > d.startTime, {
+    message: "End time must be after start time",
+    path: ["endTime"],
+  });
+
+export type UpdateCollectionDayInput = z.infer<typeof updateCollectionDaySchema>;
 export type BooklistItemInput = z.infer<typeof booklistItemInputSchema>;
 export type CreateBooklistInput = z.infer<typeof createBooklistSchema>;
 export type CreateCollectionDayInput = z.infer<typeof createCollectionDaySchema>;

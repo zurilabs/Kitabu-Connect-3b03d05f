@@ -10,17 +10,15 @@ class BookListingService {
     try {
       const { additionalPhotos, ...listingData } = data;
 
-      // Default the collection school to the seller's first child slot school (adr-016)
-      let schoolId = listingData.schoolId ?? null;
-      if (!schoolId) {
-        const [slot] = await db
-          .select({ schoolId: children.schoolId })
-          .from(children)
-          .where(eq(children.parentId, sellerId))
-          .orderBy(asc(children.displayOrder))
-          .limit(1);
-        schoolId = slot?.schoolId ?? null;
-      }
+      // The collection school is never taken from the client (adr-016): it is derived from the
+      // seller's first child slot that has a school.
+      const slots = await db
+        .select({ schoolId: children.schoolId })
+        .from(children)
+        .where(eq(children.parentId, sellerId))
+        .orderBy(asc(children.displayOrder));
+      const schoolId = slots.find((s) => s.schoolId)?.schoolId ?? null;
+      delete (listingData as { schoolId?: string | null }).schoolId;
 
       // Create the book listing
       const [listing] = await db.insert(bookListings).values({
@@ -718,6 +716,8 @@ class BookListingService {
   async updateListing(listingId: number, sellerId: string, data: UpdateBookListingInput) {
     try {
       const { additionalPhotos, ...listingData } = data;
+      // The collection school is never taken from the client (adr-016).
+      delete (listingData as { schoolId?: string | null }).schoolId;
 
       // Verify the listing belongs to the seller
       const [existingListing] = await db

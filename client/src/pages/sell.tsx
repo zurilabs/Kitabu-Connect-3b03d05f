@@ -230,7 +230,7 @@ export default function SellBook() {
           toast({
             title: "This book cannot be listed",
             description:
-              "Books with writing in them cannot be listed during the school pilot. Families need clean, reusable copies. Rub out any pencil marks and list it again, or keep this copy.",
+              "Written-in books cannot be listed in the pilot, because the next family cannot reuse them. Rub out any pencil marks and list it again, or keep this copy.",
             variant: "destructive",
           });
           return false;

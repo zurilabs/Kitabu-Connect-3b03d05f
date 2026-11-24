@@ -228,29 +228,6 @@ function getEmailTemplate(params: {
  * Email notification templates for each notification type
  */
 export const EmailTemplates = {
-  // ==================== BOOK LISTINGS ====================
-
-  wishlist_match: (data: {
-    bookTitle: string;
-    bookUrl: string;
-    matchQuality: string;
-    childName: string;
-  }) => ({
-    subject: `📚 Book Match Found: ${data.bookTitle}`,
-    html: getEmailTemplate({
-      title: `We Found a Book for ${data.childName}!`,
-      preheader: `A ${data.matchQuality} match for your wishlist`,
-      body: `
-        <p>Great news! We found a book that matches your wishlist for <strong>${data.childName}</strong>.</p>
-        <p><strong>Book:</strong> ${data.bookTitle}</p>
-        <p><strong>Match Quality:</strong> ${data.matchQuality}</p>
-        <p>Check it out now before it's gone!</p>
-      `,
-      ctaText: "View Book",
-      ctaUrl: data.bookUrl,
-    }),
-  }),
-
   // ==================== SWAP REQUESTS ====================
 
   swap_request_received: (data: {

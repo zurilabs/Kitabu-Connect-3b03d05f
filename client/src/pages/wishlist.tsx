@@ -553,6 +553,9 @@ export default function WishlistPage() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Any additional information..."
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Do not include your child's name.
+                </p>
               </div>
             </div>
             <DialogFooter className="mt-6">

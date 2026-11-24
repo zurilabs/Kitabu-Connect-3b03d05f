@@ -7,6 +7,7 @@ import {
   createBooklistSchema,
   bulkAddBooklistItemsSchema,
   createCollectionDaySchema,
+  updateCollectionDaySchema,
 } from "../db/schema/index.ts";
 import { PILOT_BOOKLIST_YEAR } from "../config/pilot";
 import { fromZodError } from "zod-validation-error";
@@ -86,7 +87,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
  * GET /api/booklists/child/:childId?year=2027
  * "My child's booklist": reusable KICD-approved items, matched listings
  * (same school first, then same grade elsewhere) and the next collection day.
- * Also builds the child slot's wishlist from the booklist (idempotent).
+ * Read-only: it does not write. The wishlist build is POST /child/:childId/build.
  */
 router.get("/child/:childId", authenticateToken, requireValidConsent, async (req: Request, res: Response) => {
   try {
@@ -100,6 +101,26 @@ router.get("/child/:childId", authenticateToken, requireValidConsent, async (req
     return res.status(200).json(result);
   } catch (error) {
     console.error("[Booklists] child view error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+/**
+ * POST /api/booklists/child/:childId/build?year=2027
+ * Build the child slot's wishlist from the school booklist (idempotent; duplicates are no-ops).
+ */
+router.post("/child/:childId/build", authenticateToken, requireValidConsent, async (req: Request, res: Response) => {
+  try {
+    const childId = parseInt(req.params.childId);
+    if (isNaN(childId)) return res.status(400).json({ message: "Invalid child ID" });
+    const yearParam = req.query.year ? parseInt(req.query.year as string) : PILOT_BOOKLIST_YEAR;
+    const year = isNaN(yearParam) ? PILOT_BOOKLIST_YEAR : yearParam;
+
+    const result = await booklistService.buildWishlistForSlot(req.user!.id, childId, year);
+    if (!result.success) return res.status(result.status).json({ message: result.message });
+    return res.status(200).json({ success: true, created: result.created });
+  } catch (error) {
+    console.error("[Booklists] build error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
@@ -127,6 +148,27 @@ collectionDaysRouter.post("/", authenticateToken, requireAdmin, async (req: Requ
     return res.status(201).json(result);
   } catch (error) {
     console.error("[CollectionDays] create error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+/**
+ * PATCH /api/collection-days/:id   (admin only)
+ * Body: { status?, startTime?, endTime?, venueNote? }. Set status "cancelled" to cancel a day.
+ */
+collectionDaysRouter.patch("/:id", authenticateToken, requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid collection day ID" });
+    const validation = updateCollectionDaySchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ message: fromZodError(validation.error).message });
+    }
+    const result = await booklistService.updateCollectionDay(id, validation.data);
+    if (!result.success) return res.status(result.status).json({ message: result.message });
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("[CollectionDays] update error:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 });
