@@ -8,6 +8,30 @@ export const OTP_MAX_ATTEMPTS = 5; // wrong guesses before the code is burned
 export const OTP_MIN_GAP_MS = 60 * 1000; // at most one send per email per minute
 export const OTP_MAX_SENDS_PER_HOUR = 5; // per email
 export const OTP_MAX_SENDS_PER_IP_PER_HOUR = 20; // per client IP, all emails together
+export const OTP_MAX_FAILED_PER_EMAIL_PER_HOUR = 10; // wrong guesses across all codes for one email
+
+/**
+ * Runs tasks one at a time per key (single server instance). Used so the per-email
+ * "check recent sends, then insert" step cannot be raced by parallel requests.
+ */
+export class KeyedMutex {
+  private tails = new Map<string, Promise<void>>();
+
+  async run<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.tails.get(key) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => (release = resolve));
+    const tail = previous.then(() => current);
+    this.tails.set(key, tail);
+    await previous;
+    try {
+      return await task();
+    } finally {
+      release();
+      if (this.tails.get(key) === tail) this.tails.delete(key);
+    }
+  }
+}
 
 /** 6-digit code from a cryptographically secure source. */
 export function generateOtpCode(): string {

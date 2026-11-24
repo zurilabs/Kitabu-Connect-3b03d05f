@@ -300,7 +300,7 @@ export async function registerRoutes(
         return res.status(429).json({ message: result.message, retryAfterSeconds: result.retryAfterSeconds });
       }
 
-      return res.status(result.success ? 200 : 400).json(result);
+      return res.status(result.success ? 200 : result.internalError ? 500 : 400).json(result);
     } catch (error) {
       console.error("[Route] send-otp error:", error);
       return res.status(500).json({ message: "Internal server error" });

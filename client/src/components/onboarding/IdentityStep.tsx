@@ -54,7 +54,7 @@ export function IdentityStep({ data, onNext }: IdentityStepProps) {
               required
             />
             <p className="text-xs text-muted-foreground">
-              {/* Use @kitabu.admin email for admin access */}
+
             </p>
           </div>
 
