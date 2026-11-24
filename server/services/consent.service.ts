@@ -1,6 +1,6 @@
 import { db } from "../db";
-import { users, children, wishlistItems } from "../db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { users, children, wishlistItems, notifications } from "../db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { CONSENT_VERSION } from "../config/pilot";
 import { hasValidConsent } from "../pilot/consent";
 
@@ -50,7 +50,7 @@ export class ConsentService {
 
   /**
    * Withdraw consent and delete this user's child slots and the wishlist items linked
-   * to them, in one transaction. Listings, swaps and ratings are not child data and stay.
+   * to them and the wishlist-match notifications, in one transaction. Listings, swaps and ratings are not child data and stay.
    */
   async withdrawAndDeleteChildData(userId: string) {
     const deletedChildSlots = await db.transaction(async (tx) => {
@@ -64,6 +64,12 @@ export class ConsentService {
         await tx.delete(wishlistItems).where(inArray(wishlistItems.childId, ids));
         await tx.delete(children).where(inArray(children.id, ids));
       }
+
+      // Wishlist-match notifications reference the child's books and grade: delete them too.
+      // (users has no child_grade column in this schema, so there is nothing to null there.)
+      await tx
+        .delete(notifications)
+        .where(and(eq(notifications.userId, userId), eq(notifications.type, "wishlist_match")));
 
       await tx
         .update(users)
