@@ -1,3 +1,4 @@
+import { isPilotMode } from "../config/pilot";
 import { db } from "../db";
 import { orders, bookListings, users } from "../db/schema";
 import { eq, and, or, desc } from "drizzle-orm";
@@ -60,7 +61,7 @@ export class OrderService {
       // Buyer pays: Book price + 5% convenience fee
       // Seller receives: Book price (platform keeps the 5% fee)
       const bookAmount = parseFloat(book.price) * quantity;
-      const convenienceFee = (bookAmount * 5) / 100; // 5% convenience fee
+      const convenienceFee = isPilotMode() ? 0 : (bookAmount * 5) / 100; // 5% convenience fee (0 in pilot mode, adr-016)
       const totalAmount = bookAmount + convenienceFee; // Total charged to buyer
       const sellerAmount = bookAmount; // Seller gets the book price only
 
