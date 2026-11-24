@@ -13,6 +13,7 @@ import {
   index,
   uniqueIndex,
   unique,
+  mysqlEnum,
 } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -2108,6 +2109,46 @@ export const collectionDays = mysqlTable(
 export type SchoolBooklist = typeof schoolBooklists.$inferSelect;
 export type SchoolBooklistItem = typeof schoolBooklistItems.$inferSelect;
 export type CollectionDay = typeof collectionDays.$inferSelect;
+
+/* ================================
+   LISTING RESERVATIONS (adr-017)
+================================ */
+export const listingReservations = mysqlTable(
+  "listing_reservations",
+  {
+    id: int("id").primaryKey().autoincrement(),
+    listingId: int("listing_id")
+      .notNull()
+      .references(() => bookListings.id, { onDelete: "cascade" }),
+    buyerId: varchar("buyer_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sellerId: varchar("seller_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    collectionDayId: int("collection_day_id").references(() => collectionDays.id, {
+      onDelete: "set null",
+    }),
+    status: mysqlEnum("status", ["reserved", "cancelled", "completed"]).notNull().default("reserved"),
+    buyerConfirmed: boolean("buyer_confirmed").notNull().default(false),
+    sellerConfirmed: boolean("seller_confirmed").notNull().default(false),
+    cancelledBy: varchar("cancelled_by", { length: 36 }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    listingStatusIdx: index("idx_listing_reservations_listing_status").on(t.listingId, t.status),
+    buyerStatusIdx: index("idx_listing_reservations_buyer_status").on(t.buyerId, t.status),
+    sellerStatusIdx: index("idx_listing_reservations_seller_status").on(t.sellerId, t.status),
+  })
+);
+
+export type ListingReservation = typeof listingReservations.$inferSelect;
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const YMD = /^\d{4}-\d{2}-\d{2}$/;

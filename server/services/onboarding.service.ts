@@ -5,7 +5,7 @@ import { consentRequirementError, hasCurrentConsent } from "../pilot/consent";
 import { CONSENT_VERSION } from "../config/pilot";
 
 export class OnboardingService {
-  async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string }> {
+  async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string; status?: number }> {
     try {
       console.log('[OnboardingService] completeOnboarding called', {
         userId,
@@ -126,6 +126,17 @@ export class OnboardingService {
       };
     } catch (error) {
       console.error("[OnboardingService] completeOnboarding error:", error);
+      // Phone number already used by another account (unique index users_phone_number_unique)
+      const e = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+      const code = e?.code ?? e?.cause?.code;
+      const text = `${e?.message ?? ""} ${e?.cause?.message ?? ""}`;
+      if (code === "ER_DUP_ENTRY" && /phone/i.test(text)) {
+        return {
+          success: false,
+          status: 409,
+          message: "This phone number is already registered to another account.",
+        };
+      }
       return {
         success: false,
         message: "Failed to complete onboarding. Please try again.",

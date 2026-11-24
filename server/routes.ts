@@ -27,6 +27,7 @@ import uploadRoutes from "./routes/upload";
 import walletRoutes from "./routes/wallet";
 import favoritesRoutes from "./routes/favorites";
 import swapRoutes from "./routes/swaps";
+import reservationRoutes from "./routes/reservations";
 import swapOrderRoutes from "./routes/swapOrders";
 import conversationRoutes from "./routes/conversations";
 import notificationRoutes from "./routes/notifications";
@@ -90,6 +91,7 @@ export async function registerRoutes(
   // SWAP ROUTES
   // ============================================
   app.use("/api/swaps", swapRoutes);
+  app.use("/api/reservations", reservationRoutes);
 
   // ============================================
   // SWAP ORDER & MESSAGING ROUTES
@@ -420,7 +422,7 @@ export async function registerRoutes(
       );
 
       if (!result.success) {
-        return res.status(400).json({ message: result.message });
+        return res.status(result.status ?? 400).json({ message: result.message });
       }
 
       return res.status(200).json({
