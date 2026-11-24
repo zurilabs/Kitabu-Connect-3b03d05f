@@ -39,10 +39,18 @@ import sitemapRoutes from "./routes/sitemap";
 import ratingsRoutes from "./routes/ratings";
 import referralRoutes from "./routes/referrals";
 import ordersRoutes from "./routes/orders";
+import booklistRoutes, { collectionDaysRouter } from "./routes/booklists";
+import consentRoutes from "./routes/consent";
 import escrowRoutes from "./routes/escrow";
 import { paymentService } from "./services/payment.service";
 import { disabledInPilot } from "./middleware/pilot.middleware";
-import { isPilotMode } from "./config/pilot";
+import {
+  isPilotMode,
+  PILOT_PAYMENT_NOTICE,
+  PILOT_BOOKLIST_YEAR,
+  CONSENT_VERSION,
+} from "./config/pilot";
+import { checkListingForPilot } from "./pilot/listingRules";
 import { log } from "console";
 
 export async function registerRoutes(
@@ -134,6 +142,23 @@ export async function registerRoutes(
   // WISHLIST ROUTES
   // ============================================
   app.use("/api/wishlist", wishlistRoutes);
+
+  // ============================================
+  // PILOT: PARENTAL CONSENT, BOOKLISTS, COLLECTION DAYS (adr-016)
+  // ============================================
+  app.use("/api/consent", consentRoutes);
+  app.use("/api/booklists", booklistRoutes);
+  app.use("/api/collection-days", collectionDaysRouter);
+
+  // Public pilot configuration for the client (no secrets)
+  app.get("/api/pilot/config", (_req, res) => {
+    return res.status(200).json({
+      pilotMode: isPilotMode(),
+      paymentNotice: PILOT_PAYMENT_NOTICE,
+      booklistYear: PILOT_BOOKLIST_YEAR,
+      consentVersion: CONSENT_VERSION,
+    });
+  });
 
   // ============================================
   // SITEMAP ROUTE (for SEO)
@@ -1268,6 +1293,12 @@ export async function registerRoutes(
         return res.status(400).json({ message: zodError.message });
       }
 
+      // Pilot mode (adr-016): books with writing in them are not accepted
+      const pilotCheck = checkListingForPilot(validation.data, isPilotMode());
+      if (!pilotCheck.ok) {
+        return res.status(422).json({ message: pilotCheck.message, code: pilotCheck.code });
+      }
+
       const sellerId = req.user!.id;
       const result = await bookListingService.createListing(sellerId, validation.data);
 
@@ -1287,6 +1318,12 @@ export async function registerRoutes(
       if (!validation.success) {
         const zodError = fromZodError(validation.error);
         return res.status(400).json({ message: zodError.message });
+      }
+
+      // Pilot mode (adr-016): do not allow flagging an existing listing as written in
+      const pilotUpdateCheck = checkListingForPilot(validation.data, isPilotMode());
+      if (!pilotUpdateCheck.ok) {
+        return res.status(422).json({ message: pilotUpdateCheck.message, code: pilotUpdateCheck.code });
       }
 
       const sellerId = req.user!.id;

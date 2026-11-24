@@ -3,6 +3,7 @@ import { swapRequestService } from "../services/swapRequest.service";
 import { swapOrderService } from "../services/swapOrder.service";
 import { bookListingService } from "../services/bookListing.service";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { isPilotMode } from "../config/pilot";
 import { createSwapRequestSchema, updateSwapRequestSchema } from "../db/schema";
 import type { Request, Response } from "express";
 
@@ -163,6 +164,7 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
     }
 
     const { meetupLocation, meetupTime } = req.body;
+    const collectionDayId = Number.isInteger(req.body?.collectionDayId) ? req.body.collectionDayId : undefined;
 
     // First, update the swap request status to accepted
     const updateResult = await swapRequestService.updateSwapRequest(
@@ -172,11 +174,21 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
         status: "accepted",
         meetupLocation,
         meetupTime: meetupTime ? new Date(meetupTime) : undefined,
+        collectionDayId,
       }
     );
 
     if (!updateResult.success) {
       return res.status(400).json({ message: updateResult.message });
+    }
+
+    // Pilot mode (adr-016): no swap order, no fee, no chat. The swap is recorded as a
+    // handover at a school collection day and both parents confirm it there.
+    if (isPilotMode()) {
+      return res.json({
+        message: "Swap request accepted. Hand the books over at the next collection day. No fee applies.",
+        redirectUrl: "/swaps",
+      });
     }
 
     // Create a swap order (like Fiverr creates an order when a gig is purchased)

@@ -39,3 +39,6 @@ export const PILOT_SUGGESTED_PRICE_MAX_RATIO = 0.6;
 
 /** Current consent notice version. Bump when the notice text changes. */
 export const CONSENT_VERSION = "2026-11-v1";
+
+/** The booklist year the pilot is loaded for. */
+export const PILOT_BOOKLIST_YEAR = 2027;
