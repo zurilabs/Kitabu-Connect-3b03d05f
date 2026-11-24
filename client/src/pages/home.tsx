@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen">
       <PageMeta
         title="Buy, Sell & Swap School Textbooks in Kenya"
-        description="Kenya's leading peer-to-peer textbook marketplace. Buy affordable used textbooks, sell your old books, or swap within your school community. Secure escrow payments, verified transactions, CBC & 8-4-4 curriculum books available."
+        description={PILOT_MODE ? "Pass on and find used school textbooks with families at your school. KICD-approved titles, handed over at school collection days. No fees." : "Kenya's leading peer-to-peer textbook marketplace. Buy affordable used textbooks, sell your old books, or swap within your school community. Secure escrow payments, verified transactions, CBC & 8-4-4 curriculum books available."}
         keywords="textbooks Kenya, buy used textbooks, sell textbooks, textbook marketplace Kenya, CBC books, 8-4-4 textbooks, school books Kenya, peer-to-peer textbooks, swap textbooks, affordable school books, Nairobi textbooks"
       />
       <OrganizationSchema
@@ -97,7 +98,7 @@ export default function Home() {
               <div className="pt-4 flex flex-wrap items-center gap-4 sm:gap-6 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-primary" />
-                  <span>Safe Escrow</span>
+                  <span>{PILOT_MODE ? "No Fees" : "Safe Escrow"}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" />
@@ -202,7 +203,9 @@ export default function Home() {
                 icon: Users,
                 title: "Meet & Exchange Safely",
                 subtitle: "School-Verified & Secure",
-                desc: "Meet parents from your school or nearby. Funds held in escrow until you confirm the book. For swaps, coordinate pickup with matched parents."
+                desc: PILOT_MODE
+                  ? "Hand books over at your school's collection day. Pay the seller directly (M-Pesa or cash). Kitabu Connect never holds your money."
+                  : "Meet parents from your school or nearby. Funds held in escrow until you confirm the book. For swaps, coordinate pickup with matched parents."
               }
             ].map((step, i) => (
               <div key={i} className="relative p-6 rounded-2xl bg-card border shadow-sm hover:shadow-md transition-shadow">

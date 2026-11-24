@@ -20,8 +20,10 @@ interface CreateBookListingData {
   region?: string;
 
   // Condition & Pricing
-  condition: "New" | "Like New" | "Good" | "Fair";
+  condition: "New" | "Like New" | "Good" | "Fair" | "Worn";
   conditionNotes?: string;
+  writtenIn?: boolean; // pilot: written-in books cannot be listed
+  schoolId?: string | null; // collection school (defaults server-side)
   price?: number;
   originalRetailPrice?: number;
   negotiable?: boolean;

@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -195,7 +196,9 @@ export default function Signup() {
               Join Kenya's trusted parent community for textbooks
             </h1>
             <p className="text-lg text-white/90">
-              Buy and sell school textbooks safely. Connect with parents at your child's school. Secure escrow payments and verified community.
+              {PILOT_MODE
+                ? "Pass on and find used school textbooks with parents at your child's school. No fees. Pay the seller directly at handover."
+                : "Buy and sell school textbooks safely. Connect with parents at your child's school. Secure escrow payments and verified community."}
             </p>
 
             <div className="space-y-4 pt-4">

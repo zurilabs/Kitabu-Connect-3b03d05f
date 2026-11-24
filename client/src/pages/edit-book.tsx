@@ -61,7 +61,7 @@ interface FormData {
   willingToSwapFor?: string;
 
   // Pricing & Condition
-  condition: "New" | "Like New" | "Good" | "Fair" | "";
+  condition: "New" | "Like New" | "Good" | "Fair" | "Worn" | "";
   conditionNotes?: string;
   price: string;
   originalRetailPrice?: string;
@@ -221,7 +221,7 @@ export default function EditBook() {
       price: Number(formData.price),
       originalRetailPrice: formData.originalRetailPrice ? Number(formData.originalRetailPrice) : undefined,
       publicationYear: formData.publicationYear,
-      condition: formData.condition as "New" | "Like New" | "Good" | "Fair",
+      condition: formData.condition as "New" | "Like New" | "Good" | "Fair" | "Worn",
     };
 
     updateListing.mutate(
@@ -585,6 +585,7 @@ export default function EditBook() {
                           <SelectItem value="Like New">Like New (No markings, minimal wear)</SelectItem>
                           <SelectItem value="Good">Good (Some wear, readable)</SelectItem>
                           <SelectItem value="Fair">Fair (Highlighted, noticeable wear)</SelectItem>
+                          <SelectItem value="Worn">Worn (Heavy wear, still complete and usable)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

@@ -1,4 +1,5 @@
-import { Switch, Route, useLocation } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
+import { PILOT_MODE, isPilotHiddenRoute } from "@/config/pilot";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -29,6 +30,7 @@ import Notifications from "@/pages/notifications";
 import DisputesPage from "@/pages/disputes";
 import DisputeDetail from "@/pages/dispute-detail";
 import WishlistPage from "@/pages/wishlist";
+import BooklistPage from "@/pages/booklist";
 import { Navbar } from "@/components/layout/Navbar";
 import { PWAInstallPrompt } from "@/components/ui/pwa-install-prompt";
 
@@ -41,6 +43,12 @@ function Router() {
   const [location] = useLocation();
   // Track page views with Google Analytics
   usePageTracking();
+
+  // Pilot mode (adr-016): deferred features are hidden. Their routes redirect to the dashboard.
+  if (PILOT_MODE && isPilotHiddenRoute(location)) {
+    return <Redirect to="/dashboard" />;
+  }
+
   // Hide navbar on auth pages, onboarding, sell, edit, and swap form pages
   const shouldHideNavbar = location === "/login" || location === "/signup" || location === "/forgot-password" || location === "/onboarding" || location === "/sell" || location.startsWith("/edit-book") || location.startsWith("/swaps/new");
 
@@ -70,6 +78,7 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/favorites" component={Favorites} />
           <Route path="/wishlist" component={WishlistPage} />
+          <Route path="/booklist" component={BooklistPage} />
           <Route path="/book/:id" component={BookDetails} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/profile" component={Profile} />

@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import { NotificationBell } from "./NotificationBell";
 import { UnreadMessagesIndicator } from "./UnreadMessagesIndicator";
 import { useState, useEffect } from "react";
+import { PILOT_MODE } from "@/config/pilot";
 
 export function Navbar() {
   const [location, setLocation] = useLocation();
@@ -120,11 +121,20 @@ export function Navbar() {
               Swaps
             </span>
           </Link>
-          <Link href="/swap-cycles">
-            <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/swap-cycles') ? 'text-primary' : 'text-muted-foreground'}`}>
-              Multi-Way
-            </span>
-          </Link>
+          {!PILOT_MODE && (
+            <Link href="/swap-cycles">
+              <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/swap-cycles') ? 'text-primary' : 'text-muted-foreground'}`}>
+                Multi-Way
+              </span>
+            </Link>
+          )}
+          {PILOT_MODE && (
+            <Link href="/booklist">
+              <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/booklist') ? 'text-primary' : 'text-muted-foreground'}`}>
+                My Booklist
+              </span>
+            </Link>
+          )}
           <Link href="/favorites">
             <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/favorites') ? 'text-primary' : 'text-muted-foreground'}`}>
               Favorites
@@ -164,18 +174,20 @@ export function Navbar() {
         <div className="flex items-center gap-1">
           {user ? (
             <>
-              {/* Messages Icon */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="relative h-9 w-9 hidden md:flex"
-                asChild
-              >
-                <Link href="/conversations">
-                  <MessageSquare className="h-5 w-5" />
-                  <UnreadMessagesIndicator />
-                </Link>
-              </Button>
+              {/* Messages Icon (hidden in pilot mode: in-app chat is deferred) */}
+              {!PILOT_MODE && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-9 w-9 hidden md:flex"
+                  asChild
+                >
+                  <Link href="/conversations">
+                    <MessageSquare className="h-5 w-5" />
+                    <UnreadMessagesIndicator />
+                  </Link>
+                </Button>
+              )}
 
               {/* Notifications Icon */}
               <div className="hidden md:block">
@@ -273,13 +285,21 @@ export function Navbar() {
                     <Link href="/swaps" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
                       Swaps
                     </Link>
-                    <Link href="/swap-cycles" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
-                      Multi-Way Swaps
-                    </Link>
-                    <Link href="/conversations" className="py-2 hover:text-primary relative inline-block" onClick={() => setIsMobileOpen(false)}>
-                      Messages
-                      <UnreadMessagesIndicator />
-                    </Link>
+                    {PILOT_MODE ? (
+                      <Link href="/booklist" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
+                        My Booklist
+                      </Link>
+                    ) : (
+                      <>
+                        <Link href="/swap-cycles" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
+                          Multi-Way Swaps
+                        </Link>
+                        <Link href="/conversations" className="py-2 hover:text-primary relative inline-block" onClick={() => setIsMobileOpen(false)}>
+                          Messages
+                          <UnreadMessagesIndicator />
+                        </Link>
+                      </>
+                    )}
                     <Link href="/favorites" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
                       Favorites
                     </Link>

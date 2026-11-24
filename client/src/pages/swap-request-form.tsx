@@ -10,6 +10,7 @@ import { BookPlaceholder } from "@/components/ui/book-placeholder";
 import { useToast } from "@/hooks/use-toast";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { ArrowLeft, ArrowLeftRight, Camera, Loader2 } from "lucide-react";
+import { PILOT_MODE } from "@/config/pilot";
 
 export default function SwapRequestForm() {
   const [, setLocation] = useLocation();
@@ -24,7 +25,8 @@ export default function SwapRequestForm() {
   const [requestedBook, setRequestedBook] = useState<any>(null);
   const [isLoadingBook, setIsLoadingBook] = useState(true);
 
-  const isPurchase = orderType === "purchase";
+  // Pilot mode (adr-016): no purchase orders, buyer pays the seller directly at handover
+  const isPurchase = !PILOT_MODE && orderType === "purchase";
 
   const [formData, setFormData] = useState({
     offeredBookTitle: "",

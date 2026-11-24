@@ -4,6 +4,7 @@ import { swapOrderService } from "../services/swapOrder.service";
 import { bookListingService } from "../services/bookListing.service";
 import { authenticateToken } from "../middleware/auth.middleware";
 import { isPilotMode } from "../config/pilot";
+import { booklistService } from "../services/booklist.service";
 import { createSwapRequestSchema, updateSwapRequestSchema } from "../db/schema";
 import type { Request, Response } from "express";
 
@@ -164,7 +165,23 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
     }
 
     const { meetupLocation, meetupTime } = req.body;
-    const collectionDayId = Number.isInteger(req.body?.collectionDayId) ? req.body.collectionDayId : undefined;
+    let collectionDayId: number | undefined = Number.isInteger(req.body?.collectionDayId)
+      ? req.body.collectionDayId
+      : undefined;
+
+    // Pilot mode (adr-016): record the handover at the next collection day of the book's school
+    let pilotCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = null;
+    if (isPilotMode() && collectionDayId === undefined) {
+      try {
+        const swapResult = await swapRequestService.getSwapRequestById(swapRequestId, userId);
+        const listingId = swapResult.success ? swapResult.swapRequest?.swapRequest.requestedListingId : undefined;
+        const listing = listingId ? await bookListingService.getListingById(listingId) : null;
+        pilotCollectionDay = await booklistService.getNextCollectionDay(listing?.schoolId ?? null);
+        collectionDayId = pilotCollectionDay?.id;
+      } catch (lookupError) {
+        console.error("[Swaps API] Collection day lookup failed:", lookupError);
+      }
+    }
 
     // First, update the swap request status to accepted
     const updateResult = await swapRequestService.updateSwapRequest(
@@ -186,7 +203,10 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
     // handover at a school collection day and both parents confirm it there.
     if (isPilotMode()) {
       return res.json({
-        message: "Swap request accepted. Hand the books over at the next collection day. No fee applies.",
+        message: pilotCollectionDay
+          ? `Swap request accepted. Hand the books over at the school collection day on ${pilotCollectionDay.date}, ${pilotCollectionDay.startTime} to ${pilotCollectionDay.endTime}. No fee applies.`
+          : "Swap request accepted. Hand the books over at the next collection day. No fee applies.",
+        collectionDay: pilotCollectionDay,
         redirectUrl: "/swaps",
       });
     }

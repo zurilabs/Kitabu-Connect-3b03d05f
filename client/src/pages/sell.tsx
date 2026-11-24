@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PILOT_MODE, PILOT_PAYMENT_NOTICE } from "@/config/pilot";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,8 +51,9 @@ interface FormData {
   bindingType?: string;
 
   // Pricing & Condition
-  condition: "New" | "Like New" | "Good" | "Fair" | "";
+  condition: "New" | "Like New" | "Good" | "Fair" | "Worn" | "";
   conditionNotes?: string;
+  writtenIn: boolean; // pilot: written-in books cannot be listed
   listingType: "sell" | "swap";
   price: string;
   originalRetailPrice?: string;
@@ -71,6 +73,7 @@ const initialFormData: FormData = {
   subject: "",
   classGrade: "",
   condition: "",
+  writtenIn: false,
   listingType: "sell",
   price: "",
   language: "English",
@@ -222,6 +225,16 @@ export default function SellBook() {
           });
           return false;
         }
+        // Pilot mode (adr-016): books with writing in them cannot be listed
+        if (PILOT_MODE && formData.writtenIn) {
+          toast({
+            title: "This book cannot be listed",
+            description:
+              "Books with writing in them cannot be listed during the school pilot. Families need clean, reusable copies. Rub out any pencil marks and list it again, or keep this copy.",
+            variant: "destructive",
+          });
+          return false;
+        }
         // For sell listings, price is required
         if (formData.listingType === 'sell' && (!formData.price || Number(formData.price) <= 0)) {
           toast({
@@ -270,7 +283,7 @@ export default function SellBook() {
       price: formData.listingType === 'sell' ? Number(formData.price) : 0,
       originalRetailPrice: formData.originalRetailPrice ? Number(formData.originalRetailPrice) : undefined,
       publicationYear: formData.publicationYear,
-      condition: formData.condition as "New" | "Like New" | "Good" | "Fair",
+      condition: formData.condition as "New" | "Like New" | "Good" | "Fair" | "Worn",
       willingToSwapFor: formData.listingType === 'swap' ? formData.willingToSwapFor : undefined,
     };
 
@@ -340,7 +353,9 @@ export default function SellBook() {
           <div className="max-w-2xl">
             <h1 className="text-3xl md:text-4xl font-display font-bold mb-4">Sell Your Textbooks</h1>
             <p className="text-primary-foreground/80 text-lg">
-              Turn your old books into cash. List in seconds, get paid securely via escrow.
+              {PILOT_MODE
+                ? "Pass on books your child has finished with to families at your school. List in seconds."
+                : "Turn your old books into cash. List in seconds, get paid securely via escrow."}
             </p>
           </div>
         </div>
@@ -627,8 +642,29 @@ export default function SellBook() {
                           <SelectItem value="Like New">Like New (No markings, minimal wear)</SelectItem>
                           <SelectItem value="Good">Good (Some wear, readable)</SelectItem>
                           <SelectItem value="Fair">Fair (Highlighted, noticeable wear)</SelectItem>
+                          <SelectItem value="Worn">Worn (Heavy wear, still complete and usable)</SelectItem>
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="writtenIn"
+                          checked={formData.writtenIn}
+                          onChange={(e) => updateFormData('writtenIn', e.target.checked)}
+                          className="rounded"
+                        />
+                        <Label htmlFor="writtenIn" className="cursor-pointer">This book has writing in it</Label>
+                      </div>
+                      {PILOT_MODE && formData.writtenIn && (
+                        <p className="text-sm text-destructive" role="alert">
+                          Books with writing in them cannot be listed during the school pilot, because families
+                          need clean, reusable copies. Rub out any pencil marks and untick this box, or keep
+                          this copy.
+                        </p>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -674,6 +710,13 @@ export default function SellBook() {
                                 onChange={(e) => updateFormData('originalRetailPrice', e.target.value)}
                               />
                             </div>
+                            {PILOT_MODE && Number(formData.originalRetailPrice) > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Suggested used price: KSh{" "}
+                                {(Math.round(Number(formData.originalRetailPrice) * 0.4 / 10) * 10).toLocaleString()} to KSh{" "}
+                                {(Math.round(Number(formData.originalRetailPrice) * 0.6 / 10) * 10).toLocaleString()}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -687,6 +730,9 @@ export default function SellBook() {
                           />
                           <Label htmlFor="negotiable" className="cursor-pointer">Price is negotiable</Label>
                         </div>
+                        {PILOT_MODE && (
+                          <p className="text-xs text-muted-foreground">{PILOT_PAYMENT_NOTICE}</p>
+                        )}
                       </>
                     ) : (
                       <div className="space-y-2">

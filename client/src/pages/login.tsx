@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,9 @@ export default function Login() {
               Kenya's Trusted Textbook Marketplace
             </h1>
             <p className="text-lg text-white/90">
-              Connect with other parents to buy and sell textbooks. Secure transactions with escrow protection and QR code verification.
+              {PILOT_MODE
+                ? "Pass on and find used school textbooks with other parents at your school. No fees."
+                : "Connect with other parents to buy and sell textbooks. Secure transactions with escrow protection and QR code verification."}
             </p>
 
             <div className="grid grid-cols-2 gap-4 pt-4">

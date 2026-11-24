@@ -22,6 +22,8 @@ import { useBookListing } from "@/hooks/useBookListing";
 import { useAuth } from "@/hooks/useAuth";
 import { useConversation } from "@/hooks/useConversation";
 import { extractIdFromSlug } from "@/lib/utils";
+import { PILOT_MODE } from "@/config/pilot";
+import { ListingHandover } from "@/components/pilot/ListingHandover";
 
 export default function BookDetails() {
   const { id: slug } = useParams();
@@ -281,6 +283,7 @@ export default function BookDetails() {
                       <MapPin className="w-3 h-3" />
                       <span className="truncate">Available quantity: {book.quantityAvailable}</span>
                     </div>
+                    {!PILOT_MODE && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -318,16 +321,20 @@ export default function BookDetails() {
                       <MessageCircle className="w-3 h-3 mr-1.5" />
                       {createConversation.isPending ? "Opening..." : "Chat with Seller"}
                     </Button>
+                    )}
                   </div>
                 </div>
 
-                <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg flex gap-3 text-sm text-blue-700 dark:text-blue-300">
-                  <ShieldCheck className="w-5 h-5 shrink-0" />
-                  <div>
-                    <span className="font-semibold block">Escrow Protection</span>
-                    Funds are held until you receive the book.
+                {!PILOT_MODE && (
+                  <div className="bg-blue-50 dark:bg-blue-950/30 p-3 rounded-lg flex gap-3 text-sm text-blue-700 dark:text-blue-300">
+                    <ShieldCheck className="w-5 h-5 shrink-0" />
+                    <div>
+                      <span className="font-semibold block">Escrow Protection</span>
+                      Funds are held until you receive the book.
+                    </div>
                   </div>
-                </div>
+                )}
+                {PILOT_MODE && <ListingHandover listing={book} />}
               </div>
 
               {isSwap ? (
@@ -339,7 +346,7 @@ export default function BookDetails() {
                   <ArrowLeftRight className="w-5 h-5 mr-2" />
                   {book.listingStatus === 'active' ? 'Initiate Swap' : 'Not Available'}
                 </Button>
-              ) : (
+              ) : PILOT_MODE ? null : (
                 <Button
                   className="w-full h-12 text-lg font-semibold bg-green-600 hover:bg-green-700"
                   disabled={book.listingStatus !== 'active'}

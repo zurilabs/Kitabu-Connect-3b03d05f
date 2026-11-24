@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { PILOT_MODE } from "@/config/pilot";
 import { useToast } from "./use-toast";
 
 interface WalletBalance {
@@ -49,6 +50,7 @@ export function useWallet() {
     error: balanceError,
   } = useQuery<WalletBalance>({
     queryKey: ["wallet", "balance"],
+    enabled: !PILOT_MODE, // wallet is off in pilot mode (adr-016)
     queryFn: async () => {
       const response = await fetch("/api/wallet/balance", {
         credentials: "include",
@@ -72,6 +74,7 @@ export function useWallet() {
     isLoading: isLoadingTransactions,
   } = useQuery<Transaction[]>({
     queryKey: ["wallet", "all-transactions"],
+    enabled: !PILOT_MODE,
     queryFn: async () => {
       const response = await fetch("/api/wallet/all-transactions?limit=50", {
         credentials: "include",
