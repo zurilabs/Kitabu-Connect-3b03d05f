@@ -324,7 +324,7 @@ export default function WishlistPage() {
                     <CardTitle className="text-lg mb-2">{item.title}</CardTitle>
                     {item.child && (
                       <CardDescription className="mb-2">
-                        For: {item.child.name || `Child ${item.child.id}`} ({item.child.grade})
+                        For: {item.child.grade} slot
                       </CardDescription>
                     )}
                   </div>

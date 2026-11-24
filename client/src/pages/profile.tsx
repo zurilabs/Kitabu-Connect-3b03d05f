@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { ChildrenManagement } from "@/components/profile/ChildrenManagement";
+import { PILOT_MODE } from "@/config/pilot";
+import { WithdrawConsentCard } from "@/components/pilot/WithdrawConsentCard";
 import {
   User,
   Users,
@@ -83,7 +85,7 @@ export default function Profile() {
       if (!response.ok) throw new Error("Failed to fetch disputes");
       return response.json();
     },
-    enabled: !!user, // Only fetch when user is logged in
+    enabled: !!user && !PILOT_MODE, // Only fetch when user is logged in
     staleTime: 1000 * 60 * 1, // 1 minute
   });
 
@@ -509,6 +511,7 @@ export default function Profile() {
                   <Users className="mr-2 h-4 w-4" />
                   <span className="text-xs sm:text-sm">Children</span>
                 </Button>
+                {!PILOT_MODE && (
                 <Button
                   variant={activeSection === "disputes" ? "default" : "outline"}
                   size="sm"
@@ -523,6 +526,7 @@ export default function Profile() {
                     </span>
                   )}
                 </Button>
+                )}
                 <Button
                   variant={activeSection === "notifications" ? "default" : "outline"}
                   size="sm"
@@ -532,6 +536,7 @@ export default function Profile() {
                   <Bell className="mr-2 h-4 w-4" />
                   <span className="text-xs sm:text-sm">Alerts</span>
                 </Button>
+                {!PILOT_MODE && (
                 <Button
                   variant={activeSection === "payment" ? "default" : "outline"}
                   size="sm"
@@ -541,6 +546,7 @@ export default function Profile() {
                   <CreditCard className="mr-2 h-4 w-4" />
                   <span className="text-xs sm:text-sm">Payment</span>
                 </Button>
+                )}
                 <Button
                   variant={activeSection === "ratings" ? "default" : "outline"}
                   size="sm"
@@ -576,6 +582,7 @@ export default function Profile() {
               <Users className="mr-2 h-4 w-4" />
               My Children
             </TabsTrigger>
+            {!PILOT_MODE && (
             <TabsTrigger value="disputes" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none relative">
               <Shield className="mr-2 h-4 w-4" />
               Disputes
@@ -585,14 +592,17 @@ export default function Profile() {
                 </span>
               )}
             </TabsTrigger>
+            )}
             <TabsTrigger value="notifications" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               <Bell className="mr-2 h-4 w-4" />
               Notifications
             </TabsTrigger>
+            {!PILOT_MODE && (
             <TabsTrigger value="payment" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               <CreditCard className="mr-2 h-4 w-4" />
               Payment Methods
             </TabsTrigger>
+            )}
             <TabsTrigger value="ratings" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
               <Star className="mr-2 h-4 w-4" />
               Ratings & Reviews
@@ -675,7 +685,10 @@ export default function Profile() {
 
           {/* Children Management Section */}
           {activeSection === "children" && (
-            <ChildrenManagement />
+            <div className="space-y-6">
+              <ChildrenManagement />
+              <WithdrawConsentCard />
+            </div>
           )}
 
           {/* Disputes Section */}

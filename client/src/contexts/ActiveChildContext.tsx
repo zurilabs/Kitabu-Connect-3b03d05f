@@ -7,9 +7,10 @@ export interface Child {
   name: string | null;
   grade: string;
   displayOrder: number;
-  displayName: string; // Computed: name or "Child N"
+  displayName: string; // Computed slot label, e.g. "Grade 5 slot at <school>" (no child name, adr-016)
   schoolId: string | null;
   schoolName: string | null;
+  curriculum: string | null;
   userId: string | null;
   createdAt: string;
   updatedAt: string;
