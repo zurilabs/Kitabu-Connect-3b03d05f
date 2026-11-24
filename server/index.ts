@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { startEscrowReleaseScheduler } from "./jobs/escrow-release";
 import { startCycleTimeoutScheduler } from "./jobs/cycle-timeout";
 import { startCycleDetectionScheduler } from "./jobs/cycle-detection";
+import { isPilotMode } from "./config/pilot";
 
 const app = express();
 const httpServer = createServer(app);
@@ -105,14 +106,15 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port} (host: ${host})`);
 
-      // Start the escrow release scheduler
-      startEscrowReleaseScheduler();
-
-      // Start the cycle timeout scheduler
-      startCycleTimeoutScheduler();
-
-      // Start the cycle detection scheduler
-      startCycleDetectionScheduler();
+      // adr-016: in pilot mode the platform holds no money and runs no swap cycles,
+      // so the escrow-release, cycle-timeout and cycle-detection schedulers stay off.
+      if (isPilotMode()) {
+        log("PILOT_MODE on: escrow-release, cycle-timeout and cycle-detection schedulers NOT started", "pilot");
+      } else {
+        startEscrowReleaseScheduler();
+        startCycleTimeoutScheduler();
+        startCycleDetectionScheduler();
+      }
 
       // Display ngrok instructions if in development
       if (process.env.NODE_ENV !== 'production') {

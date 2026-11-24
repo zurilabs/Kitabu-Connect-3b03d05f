@@ -41,6 +41,8 @@ import referralRoutes from "./routes/referrals";
 import ordersRoutes from "./routes/orders";
 import escrowRoutes from "./routes/escrow";
 import { paymentService } from "./services/payment.service";
+import { disabledInPilot } from "./middleware/pilot.middleware";
+import { isPilotMode } from "./config/pilot";
 import { log } from "console";
 
 export async function registerRoutes(
@@ -81,7 +83,7 @@ export async function registerRoutes(
   // ============================================
   // WALLET & ORDER ROUTES
   // ============================================
-  app.use("/api/wallet", walletRoutes);
+  app.use("/api/wallet", disabledInPilot("wallet"), walletRoutes);
 
   // ============================================
   // FAVORITES ROUTES
@@ -96,12 +98,12 @@ export async function registerRoutes(
   // ============================================
   // SWAP ORDER & MESSAGING ROUTES
   // ============================================
-  app.use("/api/swap-orders", swapOrderRoutes);
+  app.use("/api/swap-orders", disabledInPilot("swap-orders"), swapOrderRoutes);
 
   // ============================================
   // DIRECT MESSAGING / CONVERSATIONS ROUTES
   // ============================================
-  app.use("/api/conversations", conversationRoutes);
+  app.use("/api/conversations", disabledInPilot("conversations"), conversationRoutes);
 
   // ============================================
   // NOTIFICATION ROUTES
@@ -111,12 +113,12 @@ export async function registerRoutes(
   // ============================================
   // SWAP CYCLES ROUTES
   // ============================================
-  app.use("/api/cycles", cyclesRoutes);
+  app.use("/api/cycles", disabledInPilot("swap-cycles"), cyclesRoutes);
 
   // ============================================
   // GAMIFICATION ROUTES
   // ============================================
-  app.use("/api/gamification", gamificationRoutes);
+  app.use("/api/gamification", disabledInPilot("gamification"), gamificationRoutes);
 
   // ============================================
   // CHILDREN ROUTES
@@ -126,7 +128,7 @@ export async function registerRoutes(
   // ============================================
   // DISPUTES ROUTES
   // ============================================
-  app.use("/api/disputes", disputeRoutes);
+  app.use("/api/disputes", disabledInPilot("disputes"), disputeRoutes);
 
   // ============================================
   // WISHLIST ROUTES
@@ -146,7 +148,7 @@ export async function registerRoutes(
   // ============================================
   // REFERRAL ROUTES
   // ============================================
-  app.use("/api/referrals", referralRoutes);
+  app.use("/api/referrals", disabledInPilot("referrals"), referralRoutes);
 
   // ============================================
   // ORDERS ROUTES
@@ -156,13 +158,20 @@ export async function registerRoutes(
   // ============================================
   // ESCROW ROUTES
   // ============================================
-  app.use("/api/escrow", escrowRoutes);
+  app.use("/api/escrow", disabledInPilot("escrow"), escrowRoutes);
 
   // ============================================
   // PAYSTACK WEBHOOK
   // ============================================
   app.post("/api/webhooks/paystack", async (req, res) => {
     try {
+      // Pilot mode (adr-016): the platform never holds money. Keep the route mounted so
+      // Paystack gets a 200, but do not credit wallets or complete withdrawals.
+      if (isPilotMode()) {
+        console.log("[Webhook] Pilot mode: Paystack event acknowledged without processing:", req.body?.event);
+        return res.status(200).send("OK");
+      }
+
       const { verifyWebhookSignature } = await import("./config/paystack");
       const { withdrawalService } = await import("./services/withdrawal.service");
       const { notificationService } = await import("./services/notification.service");
@@ -638,7 +647,7 @@ export async function registerRoutes(
   });
 
   // Update payment preferences
-  app.put("/api/preferences/payment", authenticateToken, async (req, res) => {
+  app.put("/api/preferences/payment", disabledInPilot("payment-preferences"), authenticateToken, async (req, res) => {
     try {
       const { userPreferences, updatePaymentPreferencesSchema } = await import("./db/schema/index");
       const { fromZodError } = await import("zod-validation-error");
