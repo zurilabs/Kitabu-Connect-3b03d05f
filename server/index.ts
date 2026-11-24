@@ -57,7 +57,9 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Response bodies can hold parents' phone numbers and emails, so they are only
+      // logged when LOG_RESPONSE_BODIES=true is set explicitly for local debugging.
+      if (capturedJsonResponse && process.env.LOG_RESPONSE_BODIES === "true") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

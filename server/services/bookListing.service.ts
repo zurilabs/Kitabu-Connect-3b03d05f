@@ -1043,7 +1043,7 @@ class BookListingService {
         actionUrl: `/book/${listing.id}`,
       });
 
-      console.log(`[WishlistMatch] Notification sent to parent ${wishlistItem.parent.id} (${wishlistItem.parent.email})`);
+      console.log(`[WishlistMatch] Notification sent to parent ${wishlistItem.parent.id}`);
 
       // Update wishlist item to track that we notified about this match
       // Note: We're NOT marking as fulfilled because the parent might want multiple matches
