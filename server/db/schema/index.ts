@@ -98,6 +98,8 @@ export const otpCodes = mysqlTable(
 
     expiresAt: timestamp("expires_at").notNull(),
     verified: boolean("verified").notNull().default(false),
+    // adr-018: wrong guesses against this code; the code is burned at OTP_MAX_ATTEMPTS.
+    attempts: int("attempts").notNull().default(0),
 
     createdAt: timestamp("created_at")
       .notNull()
@@ -109,6 +111,7 @@ export const otpCodes = mysqlTable(
       t.code
     ),
     expiresIdx: index("idx_otp_expires").on(t.expiresAt),
+    emailCreatedIdx: index("idx_otp_email_created").on(t.email, t.createdAt),
   })
 );
 

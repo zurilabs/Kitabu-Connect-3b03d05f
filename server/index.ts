@@ -11,6 +11,13 @@ import { isPilotMode } from "./config/pilot";
 const app = express();
 const httpServer = createServer(app);
 
+// adr-018: behind Coolify/Traefik the client IP is in X-Forwarded-For. Trust exactly one proxy
+// hop in production (override with TRUST_PROXY) so per-IP login limits see real client IPs.
+const trustProxy = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === "production" ? "1" : "");
+if (trustProxy) {
+  app.set("trust proxy", /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

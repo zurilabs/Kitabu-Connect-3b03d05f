@@ -36,6 +36,15 @@ import {
   reservationRole,
 } from "../server/pilot/reservations";
 import { buildWhatsAppShareUrl } from "../client/src/lib/whatsapp";
+import {
+  OTP_MAX_ATTEMPTS,
+  SlidingWindowLimiter,
+  checkOtpSendAllowed,
+  generateOtpCode,
+  otpCodesMatch,
+  shouldExposeDevOtp,
+} from "../server/lib/otpPolicy";
+import { isAdminUser } from "../server/lib/roles";
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -310,6 +319,58 @@ test("notification text has first name, title and day, never contact details", (
   assert.ok(text.includes("Wanjiku reserved") && text.includes("Maths Grade 5") && text.includes("2026-12-12"));
   assert.ok(!text.includes("Kamau") && !text.includes("0712") && !text.includes("@"));
   assert.equal(firstName(null), "A parent");
+});
+
+console.log("Login codes and admin (adr-018)");
+test("OTP codes are 6 digits from a secure source", () => {
+  const codes = new Set<string>();
+  for (let i = 0; i < 200; i++) {
+    const c = generateOtpCode();
+    assert.match(c, /^\d{6}$/);
+    codes.add(c);
+  }
+  assert.ok(codes.size > 150, "codes should vary");
+});
+test("send limit: one per minute and five per hour per email", () => {
+  const now = new Date("2026-12-01T10:00:00Z");
+  assert.deepEqual(checkOtpSendAllowed([], now), { allowed: true });
+  const r1 = checkOtpSendAllowed([new Date(now.getTime() - 30_000)], now);
+  assert.equal(r1.allowed, false);
+  if (!r1.allowed) assert.equal(r1.retryAfterSeconds, 30);
+  assert.deepEqual(checkOtpSendAllowed([new Date(now.getTime() - 61_000)], now), { allowed: true });
+  const five = [5, 15, 25, 35, 45].map((m) => new Date(now.getTime() - m * 60_000));
+  const r2 = checkOtpSendAllowed(five, now);
+  assert.equal(r2.allowed, false);
+  const old = [61, 70, 80, 90, 100].map((m) => new Date(now.getTime() - m * 60_000));
+  assert.deepEqual(checkOtpSendAllowed(old, now), { allowed: true });
+});
+test("code comparison is exact", () => {
+  assert.equal(otpCodesMatch("012345", "012345"), true);
+  assert.equal(otpCodesMatch("012345", " 012345 "), true);
+  assert.equal(otpCodesMatch("012345", "12345"), false);
+  assert.equal(otpCodesMatch("012345", "0123456"), false);
+  assert.equal(otpCodesMatch("012345", "012346"), false);
+  assert.equal(OTP_MAX_ATTEMPTS, 5);
+});
+test("dev OTP is exposed only with NODE_ENV=development AND EXPOSE_DEV_OTP=true", () => {
+  assert.equal(shouldExposeDevOtp({ NODE_ENV: "development" } as NodeJS.ProcessEnv), false);
+  assert.equal(shouldExposeDevOtp({ NODE_ENV: "production", EXPOSE_DEV_OTP: "true" } as NodeJS.ProcessEnv), false);
+  assert.equal(shouldExposeDevOtp({ NODE_ENV: "development", EXPOSE_DEV_OTP: "true" } as NodeJS.ProcessEnv), true);
+});
+test("per-IP limiter blocks over the limit and recovers after the window", () => {
+  const l = new SlidingWindowLimiter(3, 1000);
+  assert.equal(l.hit("ip", 0), true);
+  assert.equal(l.hit("ip", 10), true);
+  assert.equal(l.hit("ip", 20), true);
+  assert.equal(l.hit("ip", 30), false);
+  assert.equal(l.hit("other", 30), true);
+  assert.equal(l.hit("ip", 1500), true);
+});
+test("admin rights come only from the stored role, never the email", () => {
+  assert.equal(isAdminUser({ role: "ADMIN" }), true);
+  assert.equal(isAdminUser({ role: "PARENT" }), false);
+  assert.equal(isAdminUser(null), false);
+  assert.equal(isAdminUser({ role: "PARENT", email: "x@kitabu.admin" } as { role: string }), false);
 });
 
 console.log(`

@@ -141,7 +141,7 @@ router.get("/all", authenticateToken, async (req, res) => {
       .where(eq(users.id, userId))
       .limit(1);
 
-    if (!user || !isAdmin(user.email)) {
+    if (!user || !isAdmin(user)) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
@@ -181,7 +181,7 @@ router.get("/stats", authenticateToken, async (req, res) => {
       .where(eq(users.id, userId))
       .limit(1);
 
-    if (!user || !isAdmin(user.email)) {
+    if (!user || !isAdmin(user)) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
@@ -352,7 +352,7 @@ router.put("/:id/assign-mediator", authenticateToken, async (req, res) => {
       .where(eq(users.id, userId))
       .limit(1);
 
-    if (!user || !isAdmin(user.email)) {
+    if (!user || !isAdmin(user)) {
       return res.status(403).json({ message: "Admin access required" });
     }
 
@@ -388,7 +388,7 @@ router.put("/:id/resolve", authenticateToken, async (req, res) => {
       .where(eq(users.id, userId))
       .limit(1);
 
-    if (!user || !isAdmin(user.email)) {
+    if (!user || !isAdmin(user)) {
       return res.status(403).json({ message: "Admin access required" });
     }
 

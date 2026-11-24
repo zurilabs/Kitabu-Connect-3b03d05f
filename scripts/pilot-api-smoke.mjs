@@ -1,6 +1,9 @@
-// Pilot API smoke test. Run against a LOCAL dev server only (NODE_ENV=development returns OTP codes).
+// Pilot API smoke test. Run against a LOCAL dev server only, started with NODE_ENV=development
+// and EXPOSE_DEV_OTP=true (so login codes are returned), on a throwaway database. Restart the
+// server before each run: the per-IP login limits are in memory.
+// DATABASE_URL must be set for this script too (it grants the test admin with scripts/set-admin-role.ts).
 // Usage: node scripts/pilot-api-smoke.mjs <schoolIdA> <schoolNameA> <schoolIdB> <schoolNameB>
-// Kitabu Connect pilot smoke test against a local throwaway DB. Usage: node kitabu-smoke.mjs <schoolA> <schoolAName> <schoolB> <schoolBName>
+import { execFileSync } from "node:child_process";
 const BASE = "http://localhost:5000";
 const [SA, SAN, SB, SBN] = process.argv.slice(2);
 const results = [];
@@ -41,6 +44,15 @@ const run = async () => {
   // Onboarding
   let r = await call(admin, "POST", "/api/onboarding/complete", { fullName: "Pilot Admin", consentAccepted: true, children: [] });
   check("admin onboarding completes", r.status === 200, short(r));
+
+  // adr-018: an @kitabu.admin email gives no admin rights until granted with the script
+  check("@kitabu.admin email is not made ADMIN at onboarding", r.json?.user?.role === "PARENT", `role=${r.json?.user?.role}`);
+  r = await call(admin, "POST", "/api/booklists", { schoolId: SA, grade: "Grade 5", year: 2027, items: [] });
+  check("ungranted @kitabu.admin account cannot create booklists", r.status === 403, short(r));
+  const grant = execFileSync(process.execPath, [
+    "node_modules/tsx/dist/cli.mjs", "scripts/set-admin-role.ts", "grant", `pilot${stamp}@kitabu.admin`,
+  ], { encoding: "utf8", env: process.env });
+  check("set-admin-role script grants ADMIN", /-> ADMIN/.test(grant), grant.trim().split("\n").pop());
   r = await call(other, "POST", "/api/onboarding/complete", { fullName: "No Consent", children: [{ grade: "Grade 5", schoolId: SA, schoolName: SAN }] });
   check("onboarding without consent is refused", r.status >= 400, short(r));
   r = await call(other, "POST", "/api/onboarding/complete", { fullName: "No Consent", markAsComplete: false, children: [{ grade: "Grade 5", schoolId: SA, schoolName: SAN }] });
@@ -215,6 +227,35 @@ const run = async () => {
   check("child write blocked after withdraw (CONSENT_REQUIRED)", r.status === 403 && r.text.includes("CONSENT_REQUIRED"), short(r));
   r = await call(buyer, "POST", "/api/wishlist", { title: "Anything", grade: "Grade 5" });
   check("wishlist write blocked after withdraw", r.status === 403, short(r));
+
+  // adr-018: login code protections
+  const target = `guess${stamp}@test.local`;
+  r = await call(null, "POST", "/api/auth/send-otp", { email: target });
+  const realCode = r.json?.message?.match(/Code: (\d{6})/)?.[1];
+  check("code sent to new email", r.status === 200 && !!realCode, short(r));
+  r = await call(null, "POST", "/api/auth/send-otp", { email: target });
+  check("second code within a minute is refused (429)", r.status === 429 && !!r.headers.get("retry-after"), short(r));
+  const wrong = realCode === "000000" ? "111111" : "000000";
+  const guesses = [];
+  for (let i = 0; i < 5; i++) guesses.push((await call(null, "POST", "/api/auth/verify-otp", { email: target, code: wrong })).status);
+  check("five wrong codes are rejected", guesses.every((s) => s === 400), guesses.join(","));
+  r = await call(null, "POST", "/api/auth/verify-otp", { email: target, code: realCode });
+  check("correct code no longer works after five wrong guesses", r.status === 400 && !(r.headers.get("set-cookie") || "").includes("auth_token="), short(r));
+
+  const target2 = `reuse${stamp}@test.local`;
+  r = await call(null, "POST", "/api/auth/send-otp", { email: target2 });
+  const code2 = r.json?.message?.match(/Code: (\d{6})/)?.[1];
+  r = await call(null, "POST", "/api/auth/verify-otp", { email: target2, code: code2 });
+  check("correct code logs in", r.status === 200, short(r));
+  r = await call(null, "POST", "/api/auth/verify-otp", { email: target2, code: code2 });
+  check("a used code cannot be used again", r.status === 400, short(r));
+
+  r = await call(seller, "PUT", "/api/profile", { email: `taken${stamp}@test.local` });
+  check("email change through profile is refused", r.status === 400 && /cannot be changed/.test(r.text), short(r));
+  r = await call(seller, "PUT", "/api/profile", { fullName: "Seller Renamed" });
+  check("profile name change still works", r.status === 200, short(r));
+  r = await call(null, "GET", "/api/debug/config");
+  check("no debug config JSON", !(r.json && typeof r.json === "object" && "nodeEnv" in r.json), short(r));
 
   const failed = results.filter((x) => !x.ok).length;
   console.log(`\n${results.length - failed}/${results.length} passed`);

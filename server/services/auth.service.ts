@@ -1,14 +1,24 @@
 import { db } from "../db";
 import { users, otpCodes, type User } from "server/db/schema";
-import { eq, and, gt, or } from "drizzle-orm";
+import { eq, and, gt, lt, or, desc, sql } from "drizzle-orm";
 import { generateToken } from "../lib/jwt";
 import { sendOTPEmail } from "../lib/email";
+import {
+  OTP_MAX_ATTEMPTS,
+  OTP_TTL_MS,
+  checkOtpSendAllowed,
+  generateOtpCode,
+  otpCodesMatch,
+  shouldExposeDevOtp,
+} from "../lib/otpPolicy";
 
 export class AuthService {
   /**
    * Send OTP verification code to user's email
    */
-  async sendOTP(email: string): Promise<{ success: boolean; message: string }> {
+  async sendOTP(
+    email: string
+  ): Promise<{ success: boolean; message: string; rateLimited?: boolean; retryAfterSeconds?: number }> {
     try {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,32 +32,45 @@ export class AuthService {
       // Normalize email (lowercase)
       const normalizedEmail = email.toLowerCase().trim();
 
-      // Generate 6-digit OTP
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      // adr-018: per-email send limit (1 per minute, 5 per hour)
+      const recent = await db
+        .select({ createdAt: otpCodes.createdAt })
+        .from(otpCodes)
+        .where(and(eq(otpCodes.email, normalizedEmail), gt(otpCodes.createdAt, new Date(Date.now() - 60 * 60 * 1000))));
+      const sendCheck = checkOtpSendAllowed(recent.map((r) => r.createdAt));
+      if (!sendCheck.allowed) {
+        return { success: false, rateLimited: true, retryAfterSeconds: sendCheck.retryAfterSeconds, message: sendCheck.reason };
+      }
 
-      // Store OTP in database
+      // adr-018: only one live code per email. Expire any earlier unused codes.
+      await db
+        .update(otpCodes)
+        .set({ expiresAt: new Date() })
+        .where(and(eq(otpCodes.email, normalizedEmail), eq(otpCodes.verified, false), gt(otpCodes.expiresAt, new Date())));
+
+      const code = generateOtpCode();
+      const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
       await db.insert(otpCodes).values({
         email: normalizedEmail,
         code,
         expiresAt,
         verified: false,
+        attempts: 0,
       });
 
       // Send OTP via email
       const emailResult = await sendOTPEmail(normalizedEmail, code);
 
       if (!emailResult.success) {
-        console.error("[AuthService] Failed to send email:", emailResult.error);
-        // Still return success as OTP is stored in DB
-        // In dev mode, user can see it in console
+        console.error("[AuthService] Failed to send verification email");
       }
 
-      // In development mode, include code in response for testing
-      const isDev = process.env.NODE_ENV === "development";
+      // adr-018: the code is only echoed back on a developer machine that opted in
+      // with EXPOSE_DEV_OTP=true; NODE_ENV=development alone is not enough.
       return {
         success: true,
-        message: isDev
+        message: shouldExposeDevOtp()
           ? `OTP sent to ${normalizedEmail}. Code: ${code} (dev mode)`
           : `Verification code sent to ${normalizedEmail}`,
       };
@@ -71,29 +94,48 @@ export class AuthService {
       // Normalize email
       const normalizedEmail = email.toLowerCase().trim();
 
-      // Find valid OTP
+      const invalid = { success: false as const, message: "Invalid or expired verification code" };
+
+      // adr-018: there is at most one live code per email; take the newest one.
       const [otpRecord] = await db
         .select()
         .from(otpCodes)
         .where(
           and(
             eq(otpCodes.email, normalizedEmail),
-            eq(otpCodes.code, code),
             eq(otpCodes.verified, false),
             gt(otpCodes.expiresAt, new Date())
           )
         )
+        .orderBy(desc(otpCodes.createdAt))
         .limit(1);
 
-      if (!otpRecord) {
-        return {
-          success: false,
-          message: "Invalid or expired verification code",
-        };
+      if (!otpRecord) return invalid;
+
+      // Count this attempt first, atomically, so parallel guesses cannot exceed the limit.
+      const [attemptResult] = await db
+        .update(otpCodes)
+        .set({ attempts: sql`${otpCodes.attempts} + 1` })
+        .where(and(eq(otpCodes.id, otpRecord.id), lt(otpCodes.attempts, OTP_MAX_ATTEMPTS)));
+      if (!attemptResult || (attemptResult as { affectedRows?: number }).affectedRows !== 1) {
+        await db.update(otpCodes).set({ expiresAt: new Date() }).where(eq(otpCodes.id, otpRecord.id));
+        return { success: false, message: "Too many wrong codes. Please request a new code." };
       }
 
-      // Mark OTP as verified
-      await db.update(otpCodes).set({ verified: true }).where(eq(otpCodes.id, otpRecord.id));
+      if (!otpCodesMatch(otpRecord.code, code)) {
+        if (otpRecord.attempts + 1 >= OTP_MAX_ATTEMPTS) {
+          await db.update(otpCodes).set({ expiresAt: new Date() }).where(eq(otpCodes.id, otpRecord.id));
+          return { success: false, message: "Too many wrong codes. Please request a new code." };
+        }
+        return invalid;
+      }
+
+      // Mark OTP as used; the guard stops the same code being used twice in parallel.
+      const [useResult] = await db
+        .update(otpCodes)
+        .set({ verified: true })
+        .where(and(eq(otpCodes.id, otpRecord.id), eq(otpCodes.verified, false)));
+      if (!useResult || (useResult as { affectedRows?: number }).affectedRows !== 1) return invalid;
 
       // Check if user exists (by email)
       let [user] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);

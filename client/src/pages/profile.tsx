@@ -654,7 +654,8 @@ export default function Profile() {
                       type="email"
                       value={formData.email}
                       className="pl-9"
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      readOnly
+                      title="Your email is your login and cannot be changed here"
                     />
                   </div>
                 </div>
@@ -1182,7 +1183,8 @@ export default function Profile() {
                       type="email"
                       value={formData.email}
                       className="pl-9"
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                      readOnly
+                      title="Your email is your login and cannot be changed here"
                     />
                   </div>
                 </div>

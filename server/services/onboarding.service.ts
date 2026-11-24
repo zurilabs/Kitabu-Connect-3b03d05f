@@ -43,8 +43,9 @@ export class OnboardingService {
         };
       }
 
-      // Determine role based on email (user already has email from login)
-      const role = currentUser.email.endsWith("@kitabu.admin") ? "ADMIN" : "PARENT";
+      // adr-018: the role is never derived from the email address. Keep whatever role the
+      // account already has; ADMIN is granted only with scripts/set-admin-role.ts.
+      const role = currentUser.role === "ADMIN" ? "ADMIN" : "PARENT";
 
       // Update user with onboarding data (without school fields)
       const updateData: any = {

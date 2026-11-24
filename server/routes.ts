@@ -53,6 +53,11 @@ import {
   CONSENT_VERSION,
 } from "./config/pilot";
 import { checkListingForPilot } from "./pilot/listingRules";
+import { SlidingWindowLimiter, OTP_MAX_SENDS_PER_IP_PER_HOUR } from "./lib/otpPolicy";
+
+// adr-018: in-memory per-IP limits for the login code endpoints (single server instance).
+const otpSendIpLimiter = new SlidingWindowLimiter(OTP_MAX_SENDS_PER_IP_PER_HOUR, 60 * 60 * 1000);
+const otpVerifyIpLimiter = new SlidingWindowLimiter(60, 15 * 60 * 1000);
 import { log } from "console";
 
 export async function registerRoutes(
@@ -281,10 +286,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: error.message });
       }
 
+      // adr-018: per-IP cap across all emails (stops code-request flooding)
+      if (!otpSendIpLimiter.hit(req.ip || "unknown")) {
+        res.setHeader("Retry-After", "900");
+        return res.status(429).json({ message: "Too many code requests from this network. Please try again later." });
+      }
+
       const { email } = validation.data;
       const result = await authService.sendOTP(email);
 
-      return res.status(200).json(result);
+      if (result.rateLimited) {
+        if (result.retryAfterSeconds) res.setHeader("Retry-After", String(result.retryAfterSeconds));
+        return res.status(429).json({ message: result.message, retryAfterSeconds: result.retryAfterSeconds });
+      }
+
+      return res.status(result.success ? 200 : 400).json(result);
     } catch (error) {
       console.error("[Route] send-otp error:", error);
       return res.status(500).json({ message: "Internal server error" });
@@ -299,6 +315,12 @@ export async function registerRoutes(
       if (!validation.success) {
         const error = fromZodError(validation.error);
         return res.status(400).json({ message: error.message });
+      }
+
+      // adr-018: per-IP cap on code checks (guessing across many emails)
+      if (!otpVerifyIpLimiter.hit(req.ip || "unknown")) {
+        res.setHeader("Retry-After", "900");
+        return res.status(429).json({ message: "Too many attempts from this network. Please try again later." });
       }
 
       const { email, code } = validation.data;
@@ -542,6 +564,15 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const { fullName, email, phoneNumber, schoolId, schoolName, profilePictureUrl } = validation.data;
 
+      // adr-018: the email is the login identity. It cannot be changed here without proving
+      // ownership of the new address, so any change is refused.
+      if (email !== undefined && email.toLowerCase().trim() !== req.user!.email.toLowerCase()) {
+        return res.status(400).json({
+          message: "Your email address is your login and cannot be changed here. Contact support to change it.",
+          requiresVerification: true,
+        });
+      }
+
       // If phone number is being changed, require verification
       if (phoneNumber && phoneNumber !== req.user!.phoneNumber) {
         return res.status(400).json({
@@ -553,7 +584,6 @@ export async function registerRoutes(
       // Build update object with only provided fields
       const updateData: any = {};
       if (fullName !== undefined) updateData.fullName = fullName;
-      if (email !== undefined) updateData.email = email;
       if (schoolId !== undefined) updateData.schoolId = schoolId;
       if (schoolName !== undefined) updateData.schoolName = schoolName;
       if (profilePictureUrl !== undefined) updateData.profilePictureUrl = profilePictureUrl;
