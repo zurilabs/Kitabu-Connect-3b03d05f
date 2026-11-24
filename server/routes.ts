@@ -77,18 +77,6 @@ export async function registerRoutes(
   app.use("/api/upload", uploadRoutes);
 
   // ============================================
-  // DEBUG ENDPOINT - Check environment variables
-  // ============================================
-  app.get("/api/debug/config", (req, res) => {
-    return res.json({
-      FRONTEND_URL: process.env.FRONTEND_URL || 'NOT SET',
-      NODE_ENV: process.env.NODE_ENV || 'development',
-      PORT: process.env.PORT || '5000',
-      PAYSTACK_CONFIGURED: !!process.env.PAYSTACK_SECRET_KEY,
-    });
-  });
-
-  // ============================================
   // WALLET & ORDER ROUTES
   // ============================================
   app.use("/api/wallet", disabledInPilot("wallet"), walletRoutes);
@@ -418,17 +406,13 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      console.log('[Route] Onboarding complete request body:', JSON.stringify(req.body, null, 2));
-
       const validation = completeOnboardingSchema.safeParse(req.body);
 
       if (!validation.success) {
-        console.log('[Route] Validation failed:', validation.error);
+        console.log('[Route] Onboarding validation failed');
         const error = fromZodError(validation.error);
         return res.status(400).json({ message: error.message });
       }
-
-      console.log('[Route] Validation successful, validated data:', JSON.stringify(validation.data, null, 2));
 
       const result = await onboardingService.completeOnboarding(
         req.user.id,
@@ -676,8 +660,6 @@ export async function registerRoutes(
     try {
       const { userPreferences, updatePaymentPreferencesSchema } = await import("./db/schema/index");
       const { fromZodError } = await import("zod-validation-error");
-
-      console.log("[Route] Payment update request body:", req.body);
 
       const validation = updatePaymentPreferencesSchema.safeParse(req.body);
 

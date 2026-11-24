@@ -36,3 +36,11 @@ export function consentRequirementError(input: {
   if (input.consentAccepted === true) return null;
   return "Parental consent is required to join. Please read the notice and tick the consent box.";
 }
+
+/** Valid consent recorded against the CURRENT notice version (older versions must be re-given). */
+export function hasCurrentConsent(
+  state: ConsentState & { consentVersion?: string | null },
+  currentVersion: string
+): boolean {
+  return hasValidConsent(state) && state.consentVersion === currentVersion;
+}

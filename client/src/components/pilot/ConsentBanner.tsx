@@ -28,14 +28,15 @@ export function userHasValidConsent(
  * Shown to signed-in, onboarded parents who have no valid consent on record
  * (existing users from before the pilot, or after a withdrawal).
  */
-export function ConsentBanner() {
+export function ConsentBanner({ force = false }: { force?: boolean } = {}) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [accepted, setAccepted] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  if (!user || !user.onboardingCompleted || userHasValidConsent(user)) return null;
+  // force: the server answered CONSENT_REQUIRED (e.g. an older notice version), so show it anyway.
+  if (!user || (!force && (!user.onboardingCompleted || userHasValidConsent(user)))) return null;
 
   const handleAccept = async () => {
     setSaving(true);

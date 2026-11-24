@@ -1,18 +1,15 @@
 import { db } from "../db";
 import { users, children, type User, type CompleteOnboardingInput } from "server/db/schema";
 import { eq } from "drizzle-orm";
-import { consentRequirementError } from "../pilot/consent";
+import { consentRequirementError, hasCurrentConsent } from "../pilot/consent";
 import { CONSENT_VERSION } from "../config/pilot";
 
 export class OnboardingService {
   async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string }> {
     try {
-      console.log('[OnboardingService] completeOnboarding called with data:', {
+      console.log('[OnboardingService] completeOnboarding called', {
         userId,
-        fullName: data.fullName,
-        phoneNumber: data.phoneNumber,
         childrenCount: data.children?.length || 0,
-        children: data.children,
       });
 
       // Get user's current email to check for admin role
@@ -33,6 +30,17 @@ export class OnboardingService {
       });
       if (consentError) {
         return { success: false, message: consentError };
+      }
+
+      // Child slots are only stored with valid, current consent (given now or already on
+      // record), regardless of markAsComplete.
+      const consentOk =
+        data.consentAccepted === true || hasCurrentConsent(currentUser, CONSENT_VERSION);
+      if (data.children && data.children.length > 0 && !consentOk) {
+        return {
+          success: false,
+          message: "Parental consent is required before child details can be saved.",
+        };
       }
 
       // Determine role based on email (user already has email from login)
@@ -83,14 +91,6 @@ export class OnboardingService {
 
         for (const child of data.children) {
           maxOrder += 1;
-          console.log('[OnboardingService] Inserting child:', {
-            parentId: userId,
-            grade: child.grade,
-            schoolId: child.schoolId,
-            schoolName: child.schoolName,
-            displayOrder: maxOrder,
-          });
-
           // Child slot only: grade + school (+ curriculum). No child name (adr-016).
           await db.insert(children).values({
             parentId: userId,

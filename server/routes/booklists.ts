@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { authenticateToken, requireAdmin } from "../middleware/auth.middleware";
+import { requireValidConsent } from "../middleware/consent.middleware";
 import { booklistService } from "../services/booklist.service";
 import {
   createBooklistSchema,
@@ -87,7 +88,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
  * (same school first, then same grade elsewhere) and the next collection day.
  * Also builds the child slot's wishlist from the booklist (idempotent).
  */
-router.get("/child/:childId", authenticateToken, async (req: Request, res: Response) => {
+router.get("/child/:childId", authenticateToken, requireValidConsent, async (req: Request, res: Response) => {
   try {
     const childId = parseInt(req.params.childId);
     if (isNaN(childId)) return res.status(400).json({ message: "Invalid child ID" });

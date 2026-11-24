@@ -11,6 +11,8 @@ import { useActiveChild, type Child } from "@/contexts/ActiveChildContext";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, GripVertical, Users } from "lucide-react";
 import { PILOT_MODE } from "@/config/pilot";
+import { ConsentBanner } from "@/components/pilot/ConsentBanner";
+import { isConsentRequiredError, throwForFailedResponse } from "@/lib/consentError";
 
 const GRADES = [
   "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6",
@@ -22,6 +24,7 @@ export function ChildrenManagement() {
   const { children, refetchChildren } = useActiveChild();
   const { toast } = useToast();
 
+  const [consentNeeded, setConsentNeeded] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<Child | null>(null);
@@ -40,7 +43,7 @@ export function ChildrenManagement() {
           schoolName: data.schoolName || null,
         }),
       });
-      if (!response.ok) throw new Error("Failed to create child");
+      if (!response.ok) await throwForFailedResponse(response, "Failed to create child");
       return response.json();
     },
     onSuccess: () => {
@@ -50,6 +53,12 @@ export function ChildrenManagement() {
       setChildForm({ grade: "", schoolId: "", schoolName: "" });
     },
     onError: (error: any) => {
+      if (isConsentRequiredError(error)) {
+        setConsentNeeded(true);
+        setIsAddDialogOpen(false);
+        setIsEditDialogOpen(false);
+        return;
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -63,7 +72,7 @@ export function ChildrenManagement() {
         credentials: "include",
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to update child");
+      if (!response.ok) await throwForFailedResponse(response, "Failed to update child");
       return response.json();
     },
     onSuccess: () => {
@@ -73,6 +82,12 @@ export function ChildrenManagement() {
       setEditingChild(null);
     },
     onError: (error: any) => {
+      if (isConsentRequiredError(error)) {
+        setConsentNeeded(true);
+        setIsAddDialogOpen(false);
+        setIsEditDialogOpen(false);
+        return;
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -142,6 +157,7 @@ export function ChildrenManagement() {
 
   return (
     <>
+      {consentNeeded && <ConsentBanner force />}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
