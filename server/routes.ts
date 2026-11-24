@@ -28,6 +28,7 @@ import walletRoutes from "./routes/wallet";
 import favoritesRoutes from "./routes/favorites";
 import swapRoutes from "./routes/swaps";
 import reservationRoutes from "./routes/reservations";
+import { firstName } from "./pilot/reservations";
 import swapOrderRoutes from "./routes/swapOrders";
 import conversationRoutes from "./routes/conversations";
 import notificationRoutes from "./routes/notifications";
@@ -1257,9 +1258,16 @@ export async function registerRoutes(
       // Increment view count
       await bookListingService.incrementViews(parseInt(id));
 
+      // Seller first name only (never the full name, phone or email)
+      const [seller] = await db
+        .select({ fullName: users.fullName })
+        .from(users)
+        .where(eq(users.id, listing.sellerId))
+        .limit(1);
+
       return res.status(200).json({
         success: true,
-        listing,
+        listing: { ...listing, sellerFirstName: firstName(seller?.fullName) },
       });
     } catch (error) {
       console.error("[Route] book-details error:", error);

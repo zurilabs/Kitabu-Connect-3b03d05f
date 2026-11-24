@@ -24,6 +24,7 @@ interface CreateBookListingData {
   conditionNotes?: string;
   writtenIn?: boolean; // pilot: written-in books cannot be listed
   schoolId?: string | null; // collection school (defaults server-side)
+  sellerFirstName?: string; // returned on the listing page; never the full name
   price?: number;
   originalRetailPrice?: number;
   negotiable?: boolean;

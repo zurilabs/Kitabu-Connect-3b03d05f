@@ -24,6 +24,7 @@ import { useConversation } from "@/hooks/useConversation";
 import { extractIdFromSlug } from "@/lib/utils";
 import { PILOT_MODE } from "@/config/pilot";
 import { ListingHandover } from "@/components/pilot/ListingHandover";
+import { ReserveSection } from "@/components/pilot/ReserveSection";
 
 export default function BookDetails() {
   const { id: slug } = useParams();
@@ -273,12 +274,12 @@ export default function BookDetails() {
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
                   <Avatar>
-                    <AvatarFallback>S</AvatarFallback>
+                    <AvatarFallback>{(book.sellerFirstName || "S").charAt(0).toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 overflow-hidden">
-                    {import.meta.env.DEV && (
-                      <p className="text-sm font-medium truncate mb-1">Seller ID: {book.sellerId}</p>
-                    )}
+                    <p className="text-sm font-medium truncate mb-1">
+                      {book.sellerFirstName || "Seller"}
+                    </p>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
                       <MapPin className="w-3 h-3" />
                       <span className="truncate">Available quantity: {book.quantityAvailable}</span>
@@ -335,6 +336,7 @@ export default function BookDetails() {
                   </div>
                 )}
                 {PILOT_MODE && <ListingHandover listing={book} />}
+                {PILOT_MODE && !isSwap && <ReserveSection listing={book} />}
               </div>
 
               {isSwap ? (

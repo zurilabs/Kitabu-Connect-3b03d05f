@@ -129,6 +129,13 @@ export function Navbar() {
             </Link>
           )}
           {PILOT_MODE && (
+            <Link href="/reservations">
+              <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/reservations') ? 'text-primary' : 'text-muted-foreground'}`}>
+                Reservations
+              </span>
+            </Link>
+          )}
+          {PILOT_MODE && (
             <Link href="/booklist">
               <span className={`text-sm font-medium transition-colors hover:text-primary cursor-pointer ${isActive('/booklist') ? 'text-primary' : 'text-muted-foreground'}`}>
                 My Booklist
@@ -299,6 +306,11 @@ export function Navbar() {
                           <UnreadMessagesIndicator />
                         </Link>
                       </>
+                    )}
+                    {PILOT_MODE && (
+                      <Link href="/reservations" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
+                        Reservations
+                      </Link>
                     )}
                     <Link href="/favorites" className="py-2 hover:text-primary" onClick={() => setIsMobileOpen(false)}>
                       Favorites

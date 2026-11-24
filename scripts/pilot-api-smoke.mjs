@@ -141,6 +141,70 @@ const run = async () => {
   r = await call(null, "GET", "/api/debug/config");
   check("debug config route removed", r.status === 404 || !(r.json && "paystackConfigured" in r.json), short(r));
 
+  // Reservations (adr-017)
+  r = await call(seller, "POST", "/api/books", listing({ title: "Reserve Test Science Grade 5", isbn: null, subject: "Science" }));
+  const resListingId = r.json?.listing?.id;
+  check("seller lists a book to reserve", !!resListingId, short(r));
+  r = await call(seller, "POST", "/api/reservations", { listingId: resListingId });
+  check("own listing cannot be reserved", r.status === 400, short(r));
+  r = await call(buyer, "POST", "/api/consent", { accepted: true });
+  r = await call(buyer, "POST", "/api/reservations", { listingId: resListingId });
+  check("buyer reserves the listing", r.status === 201, short(r));
+  const reservationId = r.json?.reservation?.id;
+  const view2 = await call(null, "GET", `/api/books/${resListingId}`);
+  check("listing shows as reserved", view2.json?.listing?.listingStatus === "reserved", short(view2));
+  check("listing exposes seller first name only", view2.json?.listing?.sellerFirstName === "Seller" && !view2.text.includes("Seller Parent"), `name=${view2.json?.listing?.sellerFirstName}`);
+  const buyer2 = await login(`buyer2${stamp}@test.local`);
+  r = await call(buyer2, "POST", "/api/onboarding/complete", { fullName: "Second Buyer", phoneNumber: "+2549" + String(stamp).slice(-8), consentAccepted: true, children: [] });
+  check("second buyer onboarding", r.status === 200, short(r));
+  r = await call(buyer2, "POST", "/api/reservations", { listingId: resListingId });
+  check("second buyer is blocked", r.status === 409, short(r));
+  const racers = await Promise.all([call(buyer2, "POST", "/api/reservations", { listingId: resListingId }), call(admin, "POST", "/api/reservations", { listingId: resListingId })]);
+  check("concurrent reserve attempts on a taken listing all fail", racers.every((x) => x.status === 409), racers.map((x) => x.status).join(","));
+  r = await call(other, "POST", `/api/reservations/${reservationId}/cancel`);
+  check("non-party cancel returns 404", r.status === 404, short(r));
+  r = await call(other, "POST", `/api/reservations/${reservationId}/confirm`);
+  check("non-party confirm returns 404", r.status === 404, short(r));
+  const sellerNotes = await call(seller, "GET", "/api/notifications");
+  const noteText = sellerNotes.text;
+  check("seller notified with title, buyer first name and day", noteText.includes("Reserve Test Science Grade 5") && noteText.includes("Buyer reserved") && noteText.includes("2026-12-12"), noteText.slice(0, 200));
+  check("notification has no phone, email or surname", !/\+254|@test\.local|Parent reserved/.test(noteText.replace(/"email":"[^"]*"/g, "")), "");
+  r = await call(buyer, "GET", "/api/reservations?role=buyer");
+  check("buyer sees reservation with first name only", r.status === 200 && r.text.includes("Seller") && !r.text.includes("Seller Parent") && !r.text.includes("+254"), short(r));
+  r = await call(seller, "GET", "/api/reservations?role=seller");
+  check("seller sees reservation", r.status === 200 && r.text.includes("Reserve Test Science Grade 5") && !r.text.includes("Buyer Parent"), short(r));
+  r = await call(buyer, "POST", `/api/reservations/${reservationId}/cancel`);
+  check("buyer cancels reservation", r.status === 200, short(r));
+  const view3 = await call(null, "GET", `/api/books/${resListingId}`);
+  check("cancel frees the listing", view3.json?.listing?.listingStatus === "active", short(view3));
+  r = await call(buyer, "POST", "/api/reservations", { listingId: resListingId });
+  const reservation2 = r.json?.reservation?.id;
+  check("listing can be reserved again after cancel", r.status === 201, short(r));
+  r = await call(buyer, "POST", `/api/reservations/${reservation2}/confirm`);
+  check("buyer confirms handover (not done yet)", r.status === 200 && r.json?.status === "reserved", short(r));
+  const mid = await call(null, "GET", `/api/books/${resListingId}`);
+  check("listing not sold after one confirmation", mid.json?.listing?.listingStatus === "reserved", short(mid));
+  r = await call(seller, "POST", `/api/reservations/${reservation2}/confirm`);
+  check("seller confirms: reservation completed", r.status === 200 && r.json?.status === "completed", short(r));
+  const sold = await call(null, "GET", `/api/books/${resListingId}`);
+  check("both confirmed marks listing sold with soldAt", sold.json?.listing?.listingStatus === "sold" && !!sold.json?.listing?.soldAt, short(sold));
+  r = await call(buyer, "POST", "/api/reservations", { listingId: resListingId });
+  check("sold listing cannot be reserved", r.status === 409, short(r));
+  // true race: two onboarded buyers reserve one fresh listing at the same time
+  r = await call(seller, "POST", "/api/books", listing({ title: "Race Test English Grade 5", isbn: null, subject: "English" }));
+  const raceId = r.json?.listing?.id;
+  const race = await Promise.all([call(buyer, "POST", "/api/reservations", { listingId: raceId }), call(buyer2, "POST", "/api/reservations", { listingId: raceId })]);
+  check("race: exactly one of two simultaneous reservations wins", race.map((x) => x.status).sort().join(",") === "201,409", race.map((x) => x.status).join(","));
+  // swap listing cannot be reserved
+  r = await call(buyer, "POST", "/api/reservations", { listingId: swapListingId });
+  check("swap listing cannot be reserved", r.status === 400, short(r));
+
+  // Duplicate phone on onboarding
+  const dupPhone = "+2547" + String(stamp).slice(-8);
+  const dupUser = await login(`dup${stamp}@test.local`);
+  r = await call(dupUser, "POST", "/api/onboarding/complete", { fullName: "Dup Phone", phoneNumber: dupPhone, consentAccepted: true, children: [] });
+  check("duplicate phone onboarding returns 409 with message", r.status === 409 && r.text.includes("already registered to another account"), short(r));
+
   // Consent withdraw
   r = await call(buyer, "POST", "/api/consent/withdraw");
   check("buyer withdraws consent", r.status === 200, short(r));

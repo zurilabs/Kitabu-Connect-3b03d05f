@@ -30,6 +30,7 @@ import Notifications from "@/pages/notifications";
 import DisputesPage from "@/pages/disputes";
 import DisputeDetail from "@/pages/dispute-detail";
 import WishlistPage from "@/pages/wishlist";
+import ReservationsPage from "@/pages/reservations";
 import BooklistPage from "@/pages/booklist";
 import { Navbar } from "@/components/layout/Navbar";
 import { PWAInstallPrompt } from "@/components/ui/pwa-install-prompt";
@@ -79,6 +80,7 @@ function Router() {
           <Route path="/favorites" component={Favorites} />
           <Route path="/wishlist" component={WishlistPage} />
           <Route path="/booklist" component={BooklistPage} />
+          <Route path="/reservations" component={ReservationsPage} />
           <Route path="/book/:id" component={BookDetails} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/profile" component={Profile} />

@@ -28,6 +28,13 @@ import { isRealDate, isTodayOrFuture } from "../server/pilot/dates";
 import { checkListingForPilot, suggestedUsedPrice } from "../server/pilot/listingRules";
 import { consentRequirementError, hasCurrentConsent, hasValidConsent } from "../server/pilot/consent";
 import { childSlotLabel, toChildSlot } from "../server/pilot/childSlot";
+import {
+  MAX_ACTIVE_RESERVATIONS_PER_BUYER,
+  checkReservable,
+  firstName,
+  reservationNotificationText,
+  reservationRole,
+} from "../server/pilot/reservations";
 import { buildWhatsAppShareUrl } from "../client/src/lib/whatsapp";
 
 let passed = 0;
@@ -273,6 +280,36 @@ test("consent from an older notice version is not current", () => {
 test("written-in message explains reuse", () => {
   const r = checkListingForPilot({ writtenIn: true }, true);
   assert.ok(r.message?.includes("next family cannot reuse"));
+});
+
+console.log("Reservations");
+test("reserve rules: own, swap, reserved, unavailable, cap", () => {
+  const base = { sellerId: "s", listingStatus: "active", listingType: "sell", quantityAvailable: 1 };
+  assert.equal(checkReservable({ buyerId: "b", listing: base, activeReservationsForBuyer: 0 }).ok, true);
+  assert.equal(checkReservable({ buyerId: "s", listing: base, activeReservationsForBuyer: 0 }).status, 400);
+  assert.equal(checkReservable({ buyerId: "b", listing: { ...base, listingType: "swap" }, activeReservationsForBuyer: 0 }).ok, false);
+  assert.equal(checkReservable({ buyerId: "b", listing: { ...base, listingStatus: "reserved" }, activeReservationsForBuyer: 0 }).status, 409);
+  assert.equal(checkReservable({ buyerId: "b", listing: { ...base, listingStatus: "sold" }, activeReservationsForBuyer: 0 }).status, 409);
+  assert.equal(
+    checkReservable({ buyerId: "b", listing: base, activeReservationsForBuyer: MAX_ACTIVE_RESERVATIONS_PER_BUYER }).status,
+    422
+  );
+});
+test("reservation parties only; others are non-parties", () => {
+  const r = { buyerId: "b", sellerId: "s" };
+  assert.equal(reservationRole("b", r), "buyer");
+  assert.equal(reservationRole("s", r), "seller");
+  assert.equal(reservationRole("x", r), null);
+});
+test("notification text has first name, title and day, never contact details", () => {
+  const text = reservationNotificationText({
+    bookTitle: "Maths Grade 5",
+    buyerName: "Wanjiku Kamau 0712345678 w@x.com",
+    collectionDay: { date: "2026-12-12", startTime: "09:00", endTime: "12:00" },
+  });
+  assert.ok(text.includes("Wanjiku reserved") && text.includes("Maths Grade 5") && text.includes("2026-12-12"));
+  assert.ok(!text.includes("Kamau") && !text.includes("0712") && !text.includes("@"));
+  assert.equal(firstName(null), "A parent");
 });
 
 console.log(`

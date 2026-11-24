@@ -125,18 +125,20 @@ export class OnboardingService {
         user: updatedUser,
       };
     } catch (error) {
-      console.error("[OnboardingService] completeOnboarding error:", error);
       // Phone number already used by another account (unique index users_phone_number_unique)
       const e = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
       const code = e?.code ?? e?.cause?.code;
       const text = `${e?.message ?? ""} ${e?.cause?.message ?? ""}`;
       if (code === "ER_DUP_ENTRY" && /phone/i.test(text)) {
+        console.warn("[OnboardingService] duplicate phone number on onboarding");
         return {
           success: false,
           status: 409,
           message: "This phone number is already registered to another account.",
         };
       }
+      // Do not log the error object for DB errors: it can echo submitted values (phone number).
+      console.error("[OnboardingService] completeOnboarding error:", (error as { code?: string })?.code ?? "unknown");
       return {
         success: false,
         message: "Failed to complete onboarding. Please try again.",
