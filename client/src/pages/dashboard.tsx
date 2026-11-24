@@ -253,7 +253,7 @@ export default function Dashboard() {
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(
@@ -274,7 +274,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(
@@ -295,7 +295,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(

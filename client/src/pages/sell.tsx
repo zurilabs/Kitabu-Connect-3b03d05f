@@ -810,7 +810,7 @@ export default function SellBook() {
                       />
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Camera className="w-3 h-3" />
-                        Add photos of the spine, back cover, or any damage. Clear photos sell 50% faster.
+                        Add photos of the spine, back cover, or any damage. Clear photos help your book sell.
                       </p>
                     </div>
                   </div>
@@ -930,10 +930,13 @@ export default function SellBook() {
                   Pricing Guide
                 </h3>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Books in "Good" condition typically sell for 40-60% of the original retail price.
+                  Books in "Good" condition are usually priced at 40 to 60% of the original retail price.
                 </p>
                 <div className="text-xs bg-muted p-2 rounded">
-                  <span className="font-medium">Platform Fee:</span> 12% is deducted only when the book sells.
+                  <span className="font-medium">Fees:</span>{" "}
+                  {PILOT_MODE
+                    ? "No fees in the pilot. Pay the other parent directly at handover."
+                    : "A platform fee is deducted only when the book sells."}
                 </div>
               </CardContent>
             </Card>

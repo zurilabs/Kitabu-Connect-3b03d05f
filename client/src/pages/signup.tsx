@@ -193,7 +193,7 @@ export default function Signup() {
 
           <div className="space-y-6 max-w-lg">
             <h1 className="text-4xl font-display font-bold leading-tight">
-              Join Kenya's trusted parent community for textbooks
+              Join the parent community for school textbooks
             </h1>
             <p className="text-lg text-white/90">
               {PILOT_MODE
@@ -252,7 +252,7 @@ export default function Signup() {
             <h2 className="text-3xl font-display font-bold">Create Parent Account</h2>
             <p className="text-muted-foreground">
               {step === "email"
-                ? "Join the trusted community of Kenyan parents"
+                ? "Join the community of Kenyan parents"
                 : "Enter the verification code we sent you"}
             </p>
           </div>

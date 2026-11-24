@@ -137,7 +137,7 @@ export default function Login() {
 
           <div className="space-y-6 max-w-lg">
             <h1 className="text-4xl font-display font-bold leading-tight">
-              Kenya's Trusted Textbook Marketplace
+              Kenya's Textbook Marketplace for Parents
             </h1>
             <p className="text-lg text-white/90">
               {PILOT_MODE
@@ -147,12 +147,12 @@ export default function Login() {
 
             <div className="grid grid-cols-2 gap-4 pt-4">
               <div className="space-y-2">
-                <div className="text-3xl font-bold">98%</div>
-                <div className="text-sm text-white/80">Trust Score</div>
+                <div className="text-xl font-bold">Parents at your school</div>
+                <div className="text-sm text-white/80">Pass books on within your school community</div>
               </div>
               <div className="space-y-2">
-                <div className="text-3xl font-bold">5k+</div>
-                <div className="text-sm text-white/80">Active Parents</div>
+                <div className="text-xl font-bold">{PILOT_MODE ? "No fees in the pilot" : "Simple and secure"}</div>
+                <div className="text-sm text-white/80">{PILOT_MODE ? "Pay the other parent directly at handover" : "Escrow-protected payments"}</div>
               </div>
             </div>
           </div>
