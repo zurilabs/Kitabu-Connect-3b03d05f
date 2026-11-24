@@ -1,6 +1,7 @@
 import { db } from "../db.ts";
 import { children, users, type CreateChildInput, type UpdateChildInput } from "../db/schema/index.ts";
 import { eq, and, asc } from "drizzle-orm";
+import { toChildSlot } from "../pilot/childSlot.ts";
 
 class ChildService {
   /**
@@ -65,10 +66,12 @@ class ChildService {
 
       const [newChild] = await db.insert(children).values({
         parentId,
-        name: data.name || null,
+        // No child name is collected (adr-016): a child is a slot of grade + school + curriculum.
+        name: null,
         grade: data.grade,
         schoolId: data.schoolId || null,
         schoolName: data.schoolName || null,
+        curriculum: data.curriculum || null,
         displayOrder: maxOrder + 1,
       });
 
@@ -109,10 +112,10 @@ class ChildService {
       await db
         .update(children)
         .set({
-          name: data.name !== undefined ? data.name : existingChild.name,
           grade: data.grade || existingChild.grade,
           schoolId: data.schoolId !== undefined ? data.schoolId : existingChild.schoolId,
           schoolName: data.schoolName !== undefined ? data.schoolName : existingChild.schoolName,
+          curriculum: data.curriculum !== undefined ? data.curriculum : existingChild.curriculum,
           displayOrder: data.displayOrder !== undefined ? data.displayOrder : existingChild.displayOrder,
         })
         .where(eq(children.id, childId));
@@ -219,11 +222,10 @@ class ChildService {
   }
 
   /**
-   * Get formatted child name for display
-   * Returns the child's name if set, otherwise "Child N"
+   * Label for a child slot, e.g. "Grade 5 slot at Brookhouse School". Never uses a name.
    */
   getChildDisplayName(child: any, index: number): string {
-    return child.name || `Child ${index + 1}`;
+    return toChildSlot(child, index).displayName;
   }
 
   /**
@@ -261,7 +263,7 @@ class ChildService {
         const gradeString = `Grade ${user.childGrade}`;
         await db.insert(children).values({
           parentId: user.id,
-          name: "My Child",
+          name: null,
           grade: gradeString,
           displayOrder: 0,
         });

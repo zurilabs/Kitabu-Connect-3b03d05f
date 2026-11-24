@@ -2,6 +2,7 @@ import { db } from "../db.ts";
 import { bookListings, bookPhotos, users, schools, children, type CreateBookListingInput, type UpdateBookListingInput } from "../db/schema/index.ts";
 import { eq, and, desc, asc, sql } from "drizzle-orm";
 import { wishlistService } from "./wishlist.service.ts";
+import { childSlotLabel } from "../pilot/childSlot.ts";
 import { notificationService } from "./notification.service.ts";
 
 class BookListingService {
@@ -9,10 +10,23 @@ class BookListingService {
     try {
       const { additionalPhotos, ...listingData } = data;
 
+      // Default the collection school to the seller's first child slot school (adr-016)
+      let schoolId = listingData.schoolId ?? null;
+      if (!schoolId) {
+        const [slot] = await db
+          .select({ schoolId: children.schoolId })
+          .from(children)
+          .where(eq(children.parentId, sellerId))
+          .orderBy(asc(children.displayOrder))
+          .limit(1);
+        schoolId = slot?.schoolId ?? null;
+      }
+
       // Create the book listing
       const [listing] = await db.insert(bookListings).values({
         sellerId,
         ...listingData,
+        schoolId,
       });
 
       const listingId = listing.insertId;
@@ -961,7 +975,7 @@ class BookListingService {
 
         // If match score is above threshold (60), consider it a match
         if (score >= 60) {
-          console.log(`[WishlistMatch] Match found! Score: ${score}, Quality: ${matchQuality}, Wishlist ID: ${wishlistItem.id}, Child: ${wishlistItem.child.name}`);
+          console.log(`[WishlistMatch] Match found! Score: ${score}, Quality: ${matchQuality}, Wishlist ID: ${wishlistItem.id}, Child: ${childSlotLabel(wishlistItem.child)}`);
           console.log(`[WishlistMatch] Match reasons: ${matchReasons.join(', ')}`);
 
           // Don't notify if the listing belongs to the same parent
@@ -1002,13 +1016,13 @@ class BookListingService {
 
       if (matchQuality === "excellent") {
         notificationTitle = "Perfect Match Found! 🎯";
-        notificationMessage = `Great news! We found an exact match for "${wishlistItem.title}" on your wishlist for ${wishlistItem.child.name}. The book "${listing.title}" is now available!`;
+        notificationMessage = `Great news! We found an exact match for "${wishlistItem.title}" on your wishlist for ${childSlotLabel(wishlistItem.child)}. The book "${listing.title}" is now available!`;
       } else if (matchQuality === "good") {
         notificationTitle = "Great Match Found! ⭐";
-        notificationMessage = `Good news! We found a strong match for "${wishlistItem.title}" on your wishlist for ${wishlistItem.child.name}. Check out "${listing.title}"!`;
+        notificationMessage = `Good news! We found a strong match for "${wishlistItem.title}" on your wishlist for ${childSlotLabel(wishlistItem.child)}. Check out "${listing.title}"!`;
       } else {
         notificationTitle = "Possible Match Found 📚";
-        notificationMessage = `We found a book that might match your wishlist for ${wishlistItem.child.name}: "${listing.title}". ${matchReasons[0] || 'Similar to what you were looking for'}.`;
+        notificationMessage = `We found a book that might match your wishlist for ${childSlotLabel(wishlistItem.child)}: "${listing.title}". ${matchReasons[0] || 'Similar to what you were looking for'}.`;
       }
 
       // Add match details to message

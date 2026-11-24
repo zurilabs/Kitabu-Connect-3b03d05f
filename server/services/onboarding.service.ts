@@ -1,6 +1,8 @@
 import { db } from "../db";
 import { users, children, type User, type CompleteOnboardingInput } from "server/db/schema";
 import { eq } from "drizzle-orm";
+import { consentRequirementError } from "../pilot/consent";
+import { CONSENT_VERSION } from "../config/pilot";
 
 export class OnboardingService {
   async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string }> {
@@ -22,6 +24,17 @@ export class OnboardingService {
         };
       }
 
+      // Parental consent is required to complete onboarding (adr-016, ODPC children's data guidance)
+      const markComplete = data.markAsComplete !== false;
+      const consentError = consentRequirementError({
+        markAsComplete: markComplete,
+        consentAccepted: data.consentAccepted,
+        existing: currentUser,
+      });
+      if (consentError) {
+        return { success: false, message: consentError };
+      }
+
       // Determine role based on email (user already has email from login)
       const role = currentUser.email.endsWith("@kitabu.admin") ? "ADMIN" : "PARENT";
 
@@ -34,6 +47,13 @@ export class OnboardingService {
         onboardingCompleted: data.markAsComplete !== false, // Only mark complete if explicitly requested (defaults to true)
         updatedAt: new Date(),
       };
+
+      // Record consent when the checkbox was ticked (version-stamped, withdrawable later)
+      if (data.consentAccepted === true) {
+        updateData.consentGivenAt = new Date();
+        updateData.consentVersion = CONSENT_VERSION;
+        updateData.consentWithdrawnAt = null;
+      }
 
       // Only update phoneNumber if provided
       if (data.phoneNumber) {
@@ -65,19 +85,20 @@ export class OnboardingService {
           maxOrder += 1;
           console.log('[OnboardingService] Inserting child:', {
             parentId: userId,
-            name: child.name || null,
             grade: child.grade,
             schoolId: child.schoolId,
             schoolName: child.schoolName,
             displayOrder: maxOrder,
           });
 
+          // Child slot only: grade + school (+ curriculum). No child name (adr-016).
           await db.insert(children).values({
             parentId: userId,
-            name: child.name || null,
+            name: null,
             grade: child.grade,
             schoolId: child.schoolId,
             schoolName: child.schoolName,
+            curriculum: child.curriculum || null,
             displayOrder: maxOrder,
           });
 

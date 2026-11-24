@@ -117,7 +117,7 @@ export class WishlistService {
         child: {
           id: item.child.id,
           parentId: item.child.parentId,
-          name: item.child.name,
+          schoolName: item.child.schoolName,
           grade: item.child.grade,
         },
         parent: {
@@ -231,7 +231,7 @@ export class WishlistService {
         ...item.wishlistItem,
         child: {
           id: item.child.id,
-          name: item.child.name,
+          schoolName: item.child.schoolName,
           grade: item.child.grade,
         },
       };
@@ -278,7 +278,7 @@ export class WishlistService {
           wishlistItem: wishlistItems,
           child: {
             id: children.id,
-            name: children.name,
+            schoolName: children.schoolName,
             grade: children.grade,
           },
         })
@@ -329,7 +329,7 @@ export class WishlistService {
           wishlistItem: wishlistItems,
           child: {
             id: children.id,
-            name: children.name,
+            schoolName: children.schoolName,
             grade: children.grade,
           },
         })
@@ -484,7 +484,7 @@ export class WishlistService {
           child: {
             id: children.id,
             parentId: children.parentId,
-            name: children.name,
+            schoolName: children.schoolName,
             grade: children.grade,
           },
           parent: {
