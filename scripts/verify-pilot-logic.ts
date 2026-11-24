@@ -20,6 +20,8 @@ import {
   eligibleBooklistItems,
   rankMatchesForItem,
   tierForListing,
+  titleSimilarity,
+  canonicalGrade,
 } from "../server/pilot/matching";
 import { checkListingForPilot, suggestedUsedPrice } from "../server/pilot/listingRules";
 import { consentRequirementError, hasValidConsent } from "../server/pilot/consent";
@@ -127,12 +129,15 @@ test("wishlist build is idempotent (already linked items are skipped)", () => {
 console.log("Matching order");
 const listings = [
   { id: 10, title: "Mathematics Activities Grade 5 Teacher Edition", isbn: null, classGrade: "Grade 5", schoolId: "school-b", sellerId: "s1", writtenIn: false },
-  { id: 11, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 6", schoolId: "school-a", sellerId: "s2", writtenIn: false },
+  { id: 11, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 5", schoolId: "school-a", sellerId: "s2", writtenIn: false },
   { id: 12, title: "Mathematics Activities Grade 5 (KLB)", isbn: "978-9966-10-0016", classGrade: "Grade 5", schoolId: "school-c", sellerId: "s3", writtenIn: false },
   { id: 13, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 5", schoolId: "school-a", sellerId: "s4", writtenIn: true },
   { id: 14, title: "Cooking for Beginners", isbn: null, classGrade: "Grade 5", schoolId: "school-a", sellerId: "s5", writtenIn: false },
   { id: 15, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 8", schoolId: "school-z", sellerId: "s6", writtenIn: false },
   { id: 16, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 5", schoolId: "school-a", sellerId: "me", writtenIn: false },
+  { id: 17, title: "Mathematics Activities Grade 6", isbn: null, classGrade: "Grade 6", schoolId: "school-a", sellerId: "s7", writtenIn: false },
+  { id: 18, title: "Mathematics Activities Grade 5", isbn: null, classGrade: "Grade 6", schoolId: "school-a", sellerId: "s8", writtenIn: false },
+  { id: 19, title: "Mathematics Activities Grade 5", isbn: null, classGrade: null, schoolId: "school-a", sellerId: "s9", writtenIn: false },
 ];
 const slotRef = { schoolId: "school-a", grade: "Grade 5" };
 test("same-school listing ranks before same-grade-elsewhere listings", () => {
@@ -150,12 +155,22 @@ test("an ISBN match outranks a partial title match inside the same tier", () => 
 });
 test("written-in, own, unrelated and other-grade-elsewhere listings are excluded", () => {
   const ids = rankMatchesForItem(listings, items[0], slotRef, { excludeSellerId: "me" }).map((r) => r.listing.id);
-  for (const excluded of [13, 14, 15, 16]) assert.ok(!ids.includes(excluded), `listing ${excluded}`);
+  for (const excluded of [13, 14, 15, 16, 17, 18, 19]) assert.ok(!ids.includes(excluded), `listing ${excluded}`);
 });
 test("tierForListing handles grade spelling and missing school", () => {
   assert.equal(tierForListing({ schoolId: null, classGrade: " grade  5 " }, { schoolId: "x", grade: "Grade 5" }), "same_grade_cluster");
   assert.equal(tierForListing({ schoolId: null, classGrade: null }, { schoolId: "x", grade: "Grade 5" }), null);
-  assert.equal(tierForListing({ schoolId: "x", classGrade: null }, { schoolId: "x", grade: "Grade 5" }), "same_school");
+  assert.equal(tierForListing({ schoolId: "x", classGrade: "GRADE 5" }, { schoolId: "x", grade: "Grade 5" }), "same_school");
+});
+test("wrong grade is never a match, even at the same school (regression)", () => {
+  assert.equal(tierForListing({ schoolId: "x", classGrade: "Grade 6" }, { schoolId: "x", grade: "Grade 5" }), null);
+  assert.equal(tierForListing({ schoolId: "y", classGrade: "Grade 6" }, { schoolId: "x", grade: "Grade 5" }), null);
+  assert.equal(tierForListing({ schoolId: "x", classGrade: null }, { schoolId: "x", grade: "Grade 5" }), null);
+});
+test("grade digits are kept in title tokens: Grade 5 vs Grade 6 titles differ", () => {
+  assert.ok(titleSimilarity("Mathematics Grade 5", "Mathematics Grade 6") < 1);
+  assert.equal(titleSimilarity("Mathematics Grade 5", "Mathematics Grade 5"), 1);
+  assert.equal(canonicalGrade(" grade   5 "), "Grade 5");
 });
 
 console.log("Listing rules");

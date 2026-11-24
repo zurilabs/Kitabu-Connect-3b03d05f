@@ -65,8 +65,19 @@ export function buildWishlistDrafts(
 
 export type MatchTier = "same_school" | "same_grade_cluster";
 
+/** Canonical stored form: trimmed, single spaces, each word capitalised ("grade  5" -> "Grade 5"). */
+export function canonicalGrade(g: string | null | undefined): string {
+  return (g ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1).toLowerCase() : w))
+    .join(" ");
+}
+
+/** Comparison form. Used on write and on read so both sides agree. */
 export function normalizeGrade(g: string | null | undefined): string {
-  return (g ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+  return canonicalGrade(g).toLowerCase();
 }
 
 export function normalizeIsbn(isbn: string | null | undefined): string {
@@ -78,7 +89,7 @@ function titleTokens(title: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, " ")
     .split(/\s+/)
-    .filter((t) => t.length > 1);
+    .filter((t) => t.length > 0); // keep single-character tokens: grade digits matter
 }
 
 /** Dice coefficient on title tokens, 0..1. */
@@ -121,25 +132,22 @@ export function scoreListingForItem(
 export const MATCH_SCORE_THRESHOLD = 60;
 
 /**
- * Tier a listing for a child slot:
- * - same_school: the listing is handed over at the slot's school (the title match decides relevance)
- * - same_grade_cluster: elsewhere in the cluster, but the same grade
+ * Tier a listing for a child slot. The grade MUST match for both tiers (a Grade 6 book is
+ * never a match for a Grade 5 slot); the school only decides the ranking:
+ * - same_school: same grade, handed over at the slot's school
+ * - same_grade_cluster: same grade, elsewhere in the cluster
  * - null: not a match
  */
 export function tierForListing(
   listing: Pick<ListingLike, "schoolId" | "classGrade">,
   slot: Pick<ChildSlotRef, "schoolId" | "grade">
 ): MatchTier | null {
+  const slotGrade = normalizeGrade(slot.grade);
+  if (!slotGrade || normalizeGrade(listing.classGrade) !== slotGrade) return null;
   if (slot.schoolId && listing.schoolId && listing.schoolId === slot.schoolId) {
     return "same_school";
   }
-  if (
-    listing.classGrade &&
-    normalizeGrade(listing.classGrade) === normalizeGrade(slot.grade)
-  ) {
-    return "same_grade_cluster";
-  }
-  return null;
+  return "same_grade_cluster";
 }
 
 export interface RankedMatch<L extends ListingLike> {
