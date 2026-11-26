@@ -39,15 +39,17 @@ export class AuthService {
       // adr-018: the check-then-insert below runs one request at a time per email, so a burst of
       // parallel requests cannot all pass the send limit and create several live codes.
       const issued = await otpSendLock.run(normalizedEmail, async () => {
-        // Per-email send limit (1 per minute, 5 per hour). Times are compared on the database
-        // clock so a different app/DB timezone cannot skew the windows.
-        const [nowRows] = (await db.execute(sql`SELECT NOW() AS dbNow`)) as unknown as [Array<{ dbNow: Date }>];
-        const dbNow = nowRows[0]?.dbNow ?? new Date();
+        // Per-email send limit (1 per minute, 5 per hour). Each code's age is computed inside
+        // MySQL (TIMESTAMPDIFF against NOW()), so app/DB timezone differences cannot skew it.
         const recent = await db
-          .select({ createdAt: otpCodes.createdAt })
+          .select({ ageSeconds: sql<number>`TIMESTAMPDIFF(SECOND, ${otpCodes.createdAt}, NOW())` })
           .from(otpCodes)
           .where(and(eq(otpCodes.email, normalizedEmail), sql`${otpCodes.createdAt} > NOW() - INTERVAL 1 HOUR`));
-        const sendCheck = checkOtpSendAllowed(recent.map((r) => r.createdAt), new Date(dbNow));
+        const now = new Date();
+        const sendCheck = checkOtpSendAllowed(
+          recent.map((r) => new Date(now.getTime() - Math.max(0, Number(r.ageSeconds)) * 1000)),
+          now
+        );
         if (!sendCheck.allowed) return { ok: false as const, sendCheck };
 
         // Only one live code per email. Expire any earlier unused codes.

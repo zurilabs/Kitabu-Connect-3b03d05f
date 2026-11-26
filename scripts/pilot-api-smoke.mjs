@@ -250,6 +250,24 @@ const run = async () => {
   r = await call(null, "POST", "/api/auth/verify-otp", { email: target2, code: code2 });
   check("a used code cannot be used again", r.status === 400, short(r));
 
+  // Burst: parallel code requests for one email must not all pass the send limit
+  const burstEmail = `burst${stamp}@test.local`;
+  const burst = await Promise.all(Array.from({ length: 5 }, () => call(null, "POST", "/api/auth/send-otp", { email: burstEmail })));
+  const burstOk = burst.filter((x) => x.status === 200).length;
+  const burst429 = burst.filter((x) => x.status === 429).length;
+  check("parallel burst: exactly one code sent, the rest 429", burstOk === 1 && burst429 === 4, burst.map((x) => x.status).join(","));
+
+  // Lockout: 10 wrong guesses across codes in the last hour block even a correct new code.
+  // Seeds the earlier failures directly in the local smoke DB (docker container kitabu-smoke-mysql).
+  const lockEmail = `lock${stamp}@test.local`;
+  execFileSync("docker", ["exec", "kitabu-smoke-mysql", "mysql", "-uroot", "-psmoke", "kitabu_smoke", "-e",
+    `INSERT INTO otp_codes (id, email, code, created_at, verified, attempts, expires_at) VALUES (UUID(), '${lockEmail}', '999999', NOW() - INTERVAL 2 MINUTE, 0, 10, NOW())`],
+    { stdio: "ignore" });
+  r = await call(null, "POST", "/api/auth/send-otp", { email: lockEmail });
+  const lockCode = r.json?.message?.match(/Code: (\d{6})/)?.[1];
+  r = await call(null, "POST", "/api/auth/verify-otp", { email: lockEmail, code: lockCode });
+  check("10 wrong guesses in the hour lock the email, even with the right code", r.status === 400 && /try again in an hour/.test(r.text), short(r));
+
   r = await call(seller, "PUT", "/api/profile", { email: `taken${stamp}@test.local` });
   check("email change through profile is refused", r.status === 400 && /cannot be changed/.test(r.text), short(r));
   r = await call(seller, "PUT", "/api/profile", { fullName: "Seller Renamed" });
