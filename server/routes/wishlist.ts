@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { requireValidConsent } from "../middleware/consent.middleware";
 import { wishlistService } from "../services/wishlist.service";
 import {
   createWishlistItemSchema,
@@ -14,7 +15,7 @@ const router = Router();
  * POST /api/wishlist
  * Create a new wishlist item for a child
  */
-router.post("/", authenticateToken, async (req: Request, res: Response) => {
+router.post("/", authenticateToken, requireValidConsent, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
 
@@ -166,7 +167,7 @@ router.get("/:id", authenticateToken, async (req: Request, res: Response) => {
  * PUT /api/wishlist/:id
  * Update a wishlist item
  */
-router.put("/:id", authenticateToken, async (req: Request, res: Response) => {
+router.put("/:id", authenticateToken, requireValidConsent, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     const wishlistItemId = parseInt(req.params.id, 10);

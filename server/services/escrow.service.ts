@@ -2,6 +2,7 @@ import { db } from "../db";
 import { escrowAccounts, transactions, users, bookListings, orders } from "../db/schema";
 import { eq, and, lt, sql } from "drizzle-orm";
 import { walletService } from "./wallet.service";
+import { isPilotMode } from "../config/pilot";
 
 export class EscrowService {
   // Platform fee percentage (e.g., 5%)
@@ -11,6 +12,7 @@ export class EscrowService {
    * Calculate platform fee
    */
   private calculatePlatformFee(amount: number): number {
+    if (isPilotMode()) return 0; // adr-016: no platform fees in pilot mode
     return (amount * this.PLATFORM_FEE_PERCENTAGE) / 100;
   }
 

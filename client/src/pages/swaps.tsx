@@ -8,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { PILOT_MODE } from "@/config/pilot";
 import {
   ArrowLeftRight,
   Check,
@@ -52,6 +53,8 @@ interface SwapRequest {
     status: string;
     offeredBookTitle: string;
     offeredBookPhotoUrl: string | null;
+    requesterConfirmed?: boolean | null;
+    ownerConfirmed?: boolean | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -145,7 +148,7 @@ export default function SwapsPage() {
 
       return response.json();
     },
-    enabled: !!user, // Only fetch when user is authenticated
+    enabled: !!user && !PILOT_MODE, // swap orders (fees, chat) are off in pilot mode
   });
 
   const isLoading = isLoadingRequests || isLoadingOrders;
@@ -236,7 +239,9 @@ export default function SwapsPage() {
       queryClient.invalidateQueries({ queryKey: ["swap-orders"] });
       toast({
         title: "Swap Request Accepted!",
-        description: "A swap order has been created.",
+        description: PILOT_MODE
+          ? (data.message as string) || "Hand the books over at the next collection day. No fee applies."
+          : "A swap order has been created.",
       });
       if (data.swapOrderId) {
         setLocation(`/orders/${data.swapOrderId}/messages`);
@@ -248,6 +253,28 @@ export default function SwapsPage() {
         description: error.message,
         variant: "destructive",
       });
+    },
+  });
+
+  // Confirm handover (pilot: swap recorded as a handover at a collection day, no fee)
+  const confirmHandover = useMutation({
+    mutationFn: async (swapRequestId: number) => {
+      const response = await fetch(`/api/swaps/${swapRequestId}/confirm`, {
+        method: "PUT",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to confirm handover");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["swap-requests"] });
+      toast({ title: "Handover confirmed", description: data.message });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
@@ -549,6 +576,21 @@ export default function SwapsPage() {
               </Button>
             </div>
           )}
+
+          {PILOT_MODE && swapReq.status === "accepted" &&
+            !(isIncoming ? swapReq.ownerConfirmed : swapReq.requesterConfirmed) && (
+              <Button
+                className="w-full"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  confirmHandover.mutate(swapReq.id);
+                }}
+                disabled={confirmHandover.isPending}
+              >
+                <Check className="w-4 h-4 mr-2" />
+                Confirm handover
+              </Button>
+            )}
 
           {/* Show View Details button for swap requests that have an order created */}
           {item.swapOrder?.id && swapReq.status !== "rejected" && swapReq.status !== "cancelled" && (

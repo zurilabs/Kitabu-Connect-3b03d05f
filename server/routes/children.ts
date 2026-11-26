@@ -1,6 +1,8 @@
 import { Router } from "express";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { requireValidConsent } from "../middleware/consent.middleware";
 import { childService } from "../services/child.service";
+import { toChildSlot } from "../pilot/childSlot";
 import {
   createChildSchema,
   updateChildSchema,
@@ -24,10 +26,8 @@ router.get("/", authenticateToken, async (req, res) => {
     }
 
     return res.status(200).json({
-      children: result.children.map((child, index) => ({
-        ...child,
-        displayName: childService.getChildDisplayName(child, index),
-      })),
+      // Child slots only: grade, school, curriculum. No child name (adr-016).
+      children: result.children.map((child, index) => toChildSlot(child, index)),
     });
   } catch (error: any) {
     console.error("Error fetching children:", error);
@@ -54,7 +54,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ message: result.message });
     }
 
-    return res.status(200).json({ child: result.child });
+    return res.status(200).json({ child: toChildSlot(result.child!, 0) });
   } catch (error: any) {
     console.error("Error fetching child:", error);
     return res.status(500).json({ message: error.message || "Internal server error" });
@@ -65,7 +65,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
  * POST /api/children
  * Create a new child
  */
-router.post("/", authenticateToken, async (req, res) => {
+router.post("/", authenticateToken, requireValidConsent, async (req, res) => {
   try {
     const userId = req.user!.id;
 
@@ -85,7 +85,7 @@ router.post("/", authenticateToken, async (req, res) => {
 
     return res.status(201).json({
       message: "Child created successfully",
-      child: result.child,
+      child: toChildSlot(result.child!, 0),
     });
   } catch (error: any) {
     console.error("Error creating child:", error);
@@ -97,7 +97,7 @@ router.post("/", authenticateToken, async (req, res) => {
  * PUT /api/children/:id
  * Update a child
  */
-router.put("/:id", authenticateToken, async (req, res) => {
+router.put("/:id", authenticateToken, requireValidConsent, async (req, res) => {
   try {
     const userId = req.user!.id;
     const childId = parseInt(req.params.id);
@@ -122,7 +122,7 @@ router.put("/:id", authenticateToken, async (req, res) => {
 
     return res.status(200).json({
       message: "Child updated successfully",
-      child: result.child,
+      child: toChildSlot(result.child!, 0),
     });
   } catch (error: any) {
     console.error("Error updating child:", error);
@@ -160,7 +160,7 @@ router.delete("/:id", authenticateToken, async (req, res) => {
  * POST /api/children/reorder
  * Reorder children (manual ordering)
  */
-router.post("/reorder", authenticateToken, async (req, res) => {
+router.post("/reorder", authenticateToken, requireValidConsent, async (req, res) => {
   try {
     const userId = req.user!.id;
 
@@ -180,7 +180,7 @@ router.post("/reorder", authenticateToken, async (req, res) => {
 
     return res.status(200).json({
       message: "Children reordered successfully",
-      children: result.children,
+      children: (result.children ?? []).map((c, i) => toChildSlot(c, i)),
     });
   } catch (error: any) {
     console.error("Error reordering children:", error);

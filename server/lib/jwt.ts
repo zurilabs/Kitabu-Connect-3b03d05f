@@ -1,7 +1,21 @@
 import { SignJWT, jwtVerify } from "jose";
+import { randomBytes } from "crypto";
 import type { User } from "server/db/schema";
 
-const JWT_SECRET = process.env.JWT_SECRET || "kitabu-secret-change-in-production";
+// adr-018: no hard-coded fallback. A known default secret would let anyone forge login tokens.
+// Outside development the server refuses to start without a strong JWT_SECRET; in development a
+// random per-process secret is used (sessions end when the server restarts).
+function resolveJwtSecret(): string {
+  const configured = process.env.JWT_SECRET;
+  if (configured && configured.length >= 32) return configured;
+  if (process.env.NODE_ENV === "development") {
+    if (configured) console.warn("[JWT] JWT_SECRET is shorter than 32 characters (allowed in development only).");
+    return configured || randomBytes(48).toString("hex");
+  }
+  throw new Error("JWT_SECRET must be set to at least 32 characters outside development.");
+}
+
+const JWT_SECRET = resolveJwtSecret();
 const secret = new TextEncoder().encode(JWT_SECRET);
 
 export interface JWTPayload {

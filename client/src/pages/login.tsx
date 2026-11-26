@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -136,20 +137,22 @@ export default function Login() {
 
           <div className="space-y-6 max-w-lg">
             <h1 className="text-4xl font-display font-bold leading-tight">
-              Kenya's Trusted Textbook Marketplace
+              Kenya's Textbook Marketplace for Parents
             </h1>
             <p className="text-lg text-white/90">
-              Connect with other parents to buy and sell textbooks. Secure transactions with escrow protection and QR code verification.
+              {PILOT_MODE
+                ? "Pass on and find used school textbooks with other parents at your school. No fees."
+                : "Connect with other parents to buy and sell textbooks. Secure transactions with escrow protection and QR code verification."}
             </p>
 
             <div className="grid grid-cols-2 gap-4 pt-4">
               <div className="space-y-2">
-                <div className="text-3xl font-bold">98%</div>
-                <div className="text-sm text-white/80">Trust Score</div>
+                <div className="text-xl font-bold">Parents at your school</div>
+                <div className="text-sm text-white/80">Pass books on within your school community</div>
               </div>
               <div className="space-y-2">
-                <div className="text-3xl font-bold">5k+</div>
-                <div className="text-sm text-white/80">Active Parents</div>
+                <div className="text-xl font-bold">{PILOT_MODE ? "No fees in the pilot" : "Simple and secure"}</div>
+                <div className="text-sm text-white/80">{PILOT_MODE ? "Pay the other parent directly at handover" : "Escrow-protected payments"}</div>
               </div>
             </div>
           </div>

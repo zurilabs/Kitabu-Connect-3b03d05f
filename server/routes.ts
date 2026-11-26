@@ -27,6 +27,8 @@ import uploadRoutes from "./routes/upload";
 import walletRoutes from "./routes/wallet";
 import favoritesRoutes from "./routes/favorites";
 import swapRoutes from "./routes/swaps";
+import reservationRoutes from "./routes/reservations";
+import { firstName } from "./pilot/reservations";
 import swapOrderRoutes from "./routes/swapOrders";
 import conversationRoutes from "./routes/conversations";
 import notificationRoutes from "./routes/notifications";
@@ -39,8 +41,23 @@ import sitemapRoutes from "./routes/sitemap";
 import ratingsRoutes from "./routes/ratings";
 import referralRoutes from "./routes/referrals";
 import ordersRoutes from "./routes/orders";
+import booklistRoutes, { collectionDaysRouter } from "./routes/booklists";
+import consentRoutes from "./routes/consent";
 import escrowRoutes from "./routes/escrow";
 import { paymentService } from "./services/payment.service";
+import { disabledInPilot } from "./middleware/pilot.middleware";
+import {
+  isPilotMode,
+  PILOT_PAYMENT_NOTICE,
+  PILOT_BOOKLIST_YEAR,
+  CONSENT_VERSION,
+} from "./config/pilot";
+import { checkListingForPilot } from "./pilot/listingRules";
+import { SlidingWindowLimiter, OTP_MAX_SENDS_PER_IP_PER_HOUR } from "./lib/otpPolicy";
+
+// adr-018: in-memory per-IP limits for the login code endpoints (single server instance).
+const otpSendIpLimiter = new SlidingWindowLimiter(OTP_MAX_SENDS_PER_IP_PER_HOUR, 60 * 60 * 1000);
+const otpVerifyIpLimiter = new SlidingWindowLimiter(60, 15 * 60 * 1000);
 import { log } from "console";
 
 export async function registerRoutes(
@@ -67,21 +84,9 @@ export async function registerRoutes(
   app.use("/api/upload", uploadRoutes);
 
   // ============================================
-  // DEBUG ENDPOINT - Check environment variables
-  // ============================================
-  app.get("/api/debug/config", (req, res) => {
-    return res.json({
-      FRONTEND_URL: process.env.FRONTEND_URL || 'NOT SET',
-      NODE_ENV: process.env.NODE_ENV || 'development',
-      PORT: process.env.PORT || '5000',
-      PAYSTACK_CONFIGURED: !!process.env.PAYSTACK_SECRET_KEY,
-    });
-  });
-
-  // ============================================
   // WALLET & ORDER ROUTES
   // ============================================
-  app.use("/api/wallet", walletRoutes);
+  app.use("/api/wallet", disabledInPilot("wallet"), walletRoutes);
 
   // ============================================
   // FAVORITES ROUTES
@@ -92,16 +97,17 @@ export async function registerRoutes(
   // SWAP ROUTES
   // ============================================
   app.use("/api/swaps", swapRoutes);
+  app.use("/api/reservations", reservationRoutes);
 
   // ============================================
   // SWAP ORDER & MESSAGING ROUTES
   // ============================================
-  app.use("/api/swap-orders", swapOrderRoutes);
+  app.use("/api/swap-orders", disabledInPilot("swap-orders"), swapOrderRoutes);
 
   // ============================================
   // DIRECT MESSAGING / CONVERSATIONS ROUTES
   // ============================================
-  app.use("/api/conversations", conversationRoutes);
+  app.use("/api/conversations", disabledInPilot("conversations"), conversationRoutes);
 
   // ============================================
   // NOTIFICATION ROUTES
@@ -111,12 +117,12 @@ export async function registerRoutes(
   // ============================================
   // SWAP CYCLES ROUTES
   // ============================================
-  app.use("/api/cycles", cyclesRoutes);
+  app.use("/api/cycles", disabledInPilot("swap-cycles"), cyclesRoutes);
 
   // ============================================
   // GAMIFICATION ROUTES
   // ============================================
-  app.use("/api/gamification", gamificationRoutes);
+  app.use("/api/gamification", disabledInPilot("gamification"), gamificationRoutes);
 
   // ============================================
   // CHILDREN ROUTES
@@ -126,12 +132,29 @@ export async function registerRoutes(
   // ============================================
   // DISPUTES ROUTES
   // ============================================
-  app.use("/api/disputes", disputeRoutes);
+  app.use("/api/disputes", disabledInPilot("disputes"), disputeRoutes);
 
   // ============================================
   // WISHLIST ROUTES
   // ============================================
   app.use("/api/wishlist", wishlistRoutes);
+
+  // ============================================
+  // PILOT: PARENTAL CONSENT, BOOKLISTS, COLLECTION DAYS (adr-016)
+  // ============================================
+  app.use("/api/consent", consentRoutes);
+  app.use("/api/booklists", booklistRoutes);
+  app.use("/api/collection-days", collectionDaysRouter);
+
+  // Public pilot configuration for the client (no secrets)
+  app.get("/api/pilot/config", (_req, res) => {
+    return res.status(200).json({
+      pilotMode: isPilotMode(),
+      paymentNotice: PILOT_PAYMENT_NOTICE,
+      booklistYear: PILOT_BOOKLIST_YEAR,
+      consentVersion: CONSENT_VERSION,
+    });
+  });
 
   // ============================================
   // SITEMAP ROUTE (for SEO)
@@ -146,7 +169,7 @@ export async function registerRoutes(
   // ============================================
   // REFERRAL ROUTES
   // ============================================
-  app.use("/api/referrals", referralRoutes);
+  app.use("/api/referrals", disabledInPilot("referrals"), referralRoutes);
 
   // ============================================
   // ORDERS ROUTES
@@ -156,13 +179,20 @@ export async function registerRoutes(
   // ============================================
   // ESCROW ROUTES
   // ============================================
-  app.use("/api/escrow", escrowRoutes);
+  app.use("/api/escrow", disabledInPilot("escrow"), escrowRoutes);
 
   // ============================================
   // PAYSTACK WEBHOOK
   // ============================================
   app.post("/api/webhooks/paystack", async (req, res) => {
     try {
+      // Pilot mode (adr-016): the platform never holds money. Keep the route mounted so
+      // Paystack gets a 200, but do not credit wallets or complete withdrawals.
+      if (isPilotMode()) {
+        console.log("[Webhook] Pilot mode: Paystack event acknowledged without processing:", req.body?.event);
+        return res.status(200).send("OK");
+      }
+
       const { verifyWebhookSignature } = await import("./config/paystack");
       const { withdrawalService } = await import("./services/withdrawal.service");
       const { notificationService } = await import("./services/notification.service");
@@ -256,10 +286,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: error.message });
       }
 
+      // adr-018: per-IP cap across all emails (stops code-request flooding)
+      if (!otpSendIpLimiter.hit(req.ip || "unknown")) {
+        res.setHeader("Retry-After", "900");
+        return res.status(429).json({ message: "Too many code requests from this network. Please try again later." });
+      }
+
       const { email } = validation.data;
       const result = await authService.sendOTP(email);
 
-      return res.status(200).json(result);
+      if (result.rateLimited) {
+        if (result.retryAfterSeconds) res.setHeader("Retry-After", String(result.retryAfterSeconds));
+        return res.status(429).json({ message: result.message, retryAfterSeconds: result.retryAfterSeconds });
+      }
+
+      return res.status(result.success ? 200 : result.internalError ? 500 : 400).json(result);
     } catch (error) {
       console.error("[Route] send-otp error:", error);
       return res.status(500).json({ message: "Internal server error" });
@@ -274,6 +315,12 @@ export async function registerRoutes(
       if (!validation.success) {
         const error = fromZodError(validation.error);
         return res.status(400).json({ message: error.message });
+      }
+
+      // adr-018: per-IP cap on code checks (guessing across many emails)
+      if (!otpVerifyIpLimiter.hit(req.ip || "unknown")) {
+        res.setHeader("Retry-After", "900");
+        return res.status(429).json({ message: "Too many attempts from this network. Please try again later." });
       }
 
       const { email, code } = validation.data;
@@ -384,17 +431,13 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      console.log('[Route] Onboarding complete request body:', JSON.stringify(req.body, null, 2));
-
       const validation = completeOnboardingSchema.safeParse(req.body);
 
       if (!validation.success) {
-        console.log('[Route] Validation failed:', validation.error);
+        console.log('[Route] Onboarding validation failed');
         const error = fromZodError(validation.error);
         return res.status(400).json({ message: error.message });
       }
-
-      console.log('[Route] Validation successful, validated data:', JSON.stringify(validation.data, null, 2));
 
       const result = await onboardingService.completeOnboarding(
         req.user.id,
@@ -402,7 +445,7 @@ export async function registerRoutes(
       );
 
       if (!result.success) {
-        return res.status(400).json({ message: result.message });
+        return res.status(result.status ?? 400).json({ message: result.message });
       }
 
       return res.status(200).json({
@@ -521,6 +564,15 @@ export async function registerRoutes(
       const userId = req.user!.id;
       const { fullName, email, phoneNumber, schoolId, schoolName, profilePictureUrl } = validation.data;
 
+      // adr-018: the email is the login identity. It cannot be changed here without proving
+      // ownership of the new address, so any change is refused.
+      if (email !== undefined && email.toLowerCase().trim() !== req.user!.email.toLowerCase()) {
+        return res.status(400).json({
+          message: "Your email address is your login and cannot be changed here. Contact support to change it.",
+          requiresVerification: true,
+        });
+      }
+
       // If phone number is being changed, require verification
       if (phoneNumber && phoneNumber !== req.user!.phoneNumber) {
         return res.status(400).json({
@@ -532,7 +584,6 @@ export async function registerRoutes(
       // Build update object with only provided fields
       const updateData: any = {};
       if (fullName !== undefined) updateData.fullName = fullName;
-      if (email !== undefined) updateData.email = email;
       if (schoolId !== undefined) updateData.schoolId = schoolId;
       if (schoolName !== undefined) updateData.schoolName = schoolName;
       if (profilePictureUrl !== undefined) updateData.profilePictureUrl = profilePictureUrl;
@@ -638,12 +689,10 @@ export async function registerRoutes(
   });
 
   // Update payment preferences
-  app.put("/api/preferences/payment", authenticateToken, async (req, res) => {
+  app.put("/api/preferences/payment", disabledInPilot("payment-preferences"), authenticateToken, async (req, res) => {
     try {
       const { userPreferences, updatePaymentPreferencesSchema } = await import("./db/schema/index");
       const { fromZodError } = await import("zod-validation-error");
-
-      console.log("[Route] Payment update request body:", req.body);
 
       const validation = updatePaymentPreferencesSchema.safeParse(req.body);
 
@@ -1239,9 +1288,16 @@ export async function registerRoutes(
       // Increment view count
       await bookListingService.incrementViews(parseInt(id));
 
+      // Seller first name only (never the full name, phone or email)
+      const [seller] = await db
+        .select({ fullName: users.fullName })
+        .from(users)
+        .where(eq(users.id, listing.sellerId))
+        .limit(1);
+
       return res.status(200).json({
         success: true,
-        listing,
+        listing: { ...listing, sellerFirstName: firstName(seller?.fullName) },
       });
     } catch (error) {
       console.error("[Route] book-details error:", error);
@@ -1257,6 +1313,12 @@ export async function registerRoutes(
       if (!validation.success) {
         const zodError = fromZodError(validation.error);
         return res.status(400).json({ message: zodError.message });
+      }
+
+      // Pilot mode (adr-016): books with writing in them are not accepted
+      const pilotCheck = checkListingForPilot(validation.data, isPilotMode());
+      if (!pilotCheck.ok) {
+        return res.status(422).json({ message: pilotCheck.message, code: pilotCheck.code });
       }
 
       const sellerId = req.user!.id;
@@ -1278,6 +1340,12 @@ export async function registerRoutes(
       if (!validation.success) {
         const zodError = fromZodError(validation.error);
         return res.status(400).json({ message: zodError.message });
+      }
+
+      // Pilot mode (adr-016): do not allow flagging an existing listing as written in
+      const pilotUpdateCheck = checkListingForPilot(validation.data, isPilotMode());
+      if (!pilotUpdateCheck.ok) {
+        return res.status(422).json({ message: pilotUpdateCheck.message, code: pilotUpdateCheck.code });
       }
 
       const sellerId = req.user!.id;

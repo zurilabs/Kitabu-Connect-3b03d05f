@@ -10,6 +10,8 @@
  * Note: We primarily use M-PESA for local transactions (1.5%)
  */
 
+import { isPilotMode } from "../config/pilot";
+
 export type PaymentMethod = 'mpesa' | 'card_local' | 'card_international';
 
 export interface PaystackFeeBreakdown {
@@ -119,6 +121,19 @@ export function calculatePurchaseOrderFees(
   totalAmount: number;
   paymentMethod: PaymentMethod;
 } {
+  // Pilot mode (adr-016): no platform fee, no Paystack fee. Buyer pays seller directly.
+  if (isPilotMode()) {
+    const price = Math.ceil(bookPrice * 100) / 100;
+    return {
+      bookPrice: price,
+      serviceFee: 0,
+      subtotal: price,
+      paystackFee: 0,
+      totalAmount: price,
+      paymentMethod,
+    };
+  }
+
   const serviceFee = bookPrice * serviceFeePercentage;
   const subtotal = bookPrice + serviceFee; // Amount before Paystack fees
 
@@ -151,6 +166,11 @@ export function calculateSwapOrderFees(
   totalPerParty: number;
   paymentMethod: PaymentMethod;
 } {
+  // Pilot mode (adr-016): swaps carry no fee.
+  if (isPilotMode()) {
+    return { exchangeFee: 0, paystackFee: 0, totalPerParty: 0, paymentMethod };
+  }
+
   // Each party pays exchange fee + Paystack fee
   const totalPerParty = calculateAmountWithPaystackFees(exchangeFeePerParty, paymentMethod);
   const paystackFee = totalPerParty - exchangeFeePerParty;

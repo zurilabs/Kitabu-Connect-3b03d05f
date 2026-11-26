@@ -6,9 +6,17 @@ import { createServer } from "http";
 import { startEscrowReleaseScheduler } from "./jobs/escrow-release";
 import { startCycleTimeoutScheduler } from "./jobs/cycle-timeout";
 import { startCycleDetectionScheduler } from "./jobs/cycle-detection";
+import { isPilotMode } from "./config/pilot";
 
 const app = express();
 const httpServer = createServer(app);
+
+// adr-018: behind Coolify/Traefik the client IP is in X-Forwarded-For. Trust exactly one proxy
+// hop in production (override with TRUST_PROXY) so per-IP login limits see real client IPs.
+const trustProxy = process.env.TRUST_PROXY ?? (process.env.NODE_ENV === "production" ? "1" : "");
+if (trustProxy) {
+  app.set("trust proxy", /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -56,7 +64,9 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Response bodies can hold parents' phone numbers and emails, so they are only
+      // logged when LOG_RESPONSE_BODIES=true is set explicitly for local debugging.
+      if (capturedJsonResponse && process.env.LOG_RESPONSE_BODIES === "true") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
@@ -105,14 +115,15 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port} (host: ${host})`);
 
-      // Start the escrow release scheduler
-      startEscrowReleaseScheduler();
-
-      // Start the cycle timeout scheduler
-      startCycleTimeoutScheduler();
-
-      // Start the cycle detection scheduler
-      startCycleDetectionScheduler();
+      // adr-016: in pilot mode the platform holds no money and runs no swap cycles,
+      // so the escrow-release, cycle-timeout and cycle-detection schedulers stay off.
+      if (isPilotMode()) {
+        log("PILOT_MODE on: escrow-release, cycle-timeout and cycle-detection schedulers NOT started", "pilot");
+      } else {
+        startEscrowReleaseScheduler();
+        startCycleTimeoutScheduler();
+        startCycleDetectionScheduler();
+      }
 
       // Display ngrok instructions if in development
       if (process.env.NODE_ENV !== 'production') {

@@ -40,9 +40,14 @@ export interface SendSMSParams {
 export async function sendSMS({ to, message }: SendSMSParams): Promise<{ success: boolean; error?: string }> {
   // In development mode or if Twilio is not configured, just log the SMS
   if (process.env.NODE_ENV === "development" || !isTwilioConfigured) {
-    console.log(`\n📱 [SMS ${process.env.NODE_ENV === "development" ? "Dev Mode" : "SKIPPED - Not Configured"}]`);
-    console.log(`To: ${to}`);
-    console.log(`Message: ${message}\n`);
+    // Phone number and message (which can hold OTP codes) are printed only in local development.
+    if (process.env.NODE_ENV === "development") {
+      console.log(`\n📱 [SMS Dev Mode]`);
+      console.log(`To: ${to}`);
+      console.log(`Message: ${message}\n`);
+    } else {
+      console.log(`📱 [SMS SKIPPED - Not Configured]`);
+    }
 
     if (!isTwilioConfigured) {
       console.warn('⚠️ Twilio credentials not configured. SMS will not be sent in production!');

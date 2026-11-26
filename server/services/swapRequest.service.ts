@@ -148,6 +148,7 @@ export class SwapRequestService {
         message: data.message || null,
         deliveryMethod: data.deliveryMethod || "meetup",
         meetupLocation: data.meetupLocation || null,
+        collectionDayId: data.collectionDayId ?? null,
         status: "pending",
       });
 
@@ -431,6 +432,7 @@ export class SwapRequestService {
         status: data.status,
         meetupLocation: data.meetupLocation,
         meetupTime: data.meetupTime ? new Date(data.meetupTime) : undefined,
+        collectionDayId: data.collectionDayId,
         requesterConfirmed: data.requesterConfirmed,
         ownerConfirmed: data.ownerConfirmed,
         acceptedAt: data.status === "accepted" ? new Date() : undefined,

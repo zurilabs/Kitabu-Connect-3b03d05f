@@ -3,6 +3,8 @@ import { swapRequestService } from "../services/swapRequest.service";
 import { swapOrderService } from "../services/swapOrder.service";
 import { bookListingService } from "../services/bookListing.service";
 import { authenticateToken } from "../middleware/auth.middleware";
+import { isPilotMode } from "../config/pilot";
+import { booklistService } from "../services/booklist.service";
 import { createSwapRequestSchema, updateSwapRequestSchema } from "../db/schema";
 import type { Request, Response } from "express";
 
@@ -163,6 +165,38 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
     }
 
     const { meetupLocation, meetupTime } = req.body;
+    let collectionDayId: number | undefined = Number.isInteger(req.body?.collectionDayId)
+      ? req.body.collectionDayId
+      : undefined;
+
+    // A client-supplied collection day must exist, belong to the listing's school and not be cancelled.
+    let chosenCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = null;
+    if (collectionDayId !== undefined) {
+      const swapResult = await swapRequestService.getSwapRequestById(swapRequestId, userId);
+      const listingId = swapResult.success ? swapResult.swapRequest?.swapRequest.requestedListingId : undefined;
+      const listing = listingId ? await bookListingService.getListingById(listingId) : null;
+      const dayError = await booklistService.validateCollectionDayForSchool(
+        collectionDayId,
+        listing?.schoolId ?? null
+      );
+      if (dayError) return res.status(422).json({ message: dayError });
+      const upcoming = await booklistService.listUpcomingCollectionDays(listing?.schoolId ?? undefined);
+      chosenCollectionDay = upcoming.find((d) => d.id === collectionDayId) ?? null;
+    }
+
+    // Pilot mode (adr-016): record the handover at the next collection day of the book's school
+    let pilotCollectionDay: Awaited<ReturnType<typeof booklistService.getNextCollectionDay>> = chosenCollectionDay;
+    if (isPilotMode() && collectionDayId === undefined) {
+      try {
+        const swapResult = await swapRequestService.getSwapRequestById(swapRequestId, userId);
+        const listingId = swapResult.success ? swapResult.swapRequest?.swapRequest.requestedListingId : undefined;
+        const listing = listingId ? await bookListingService.getListingById(listingId) : null;
+        pilotCollectionDay = await booklistService.getNextCollectionDay(listing?.schoolId ?? null);
+        collectionDayId = pilotCollectionDay?.id;
+      } catch (lookupError) {
+        console.error("[Swaps API] Collection day lookup failed:", lookupError);
+      }
+    }
 
     // First, update the swap request status to accepted
     const updateResult = await swapRequestService.updateSwapRequest(
@@ -172,11 +206,24 @@ router.put("/:id/accept", authenticateToken, async (req: Request, res: Response)
         status: "accepted",
         meetupLocation,
         meetupTime: meetupTime ? new Date(meetupTime) : undefined,
+        collectionDayId,
       }
     );
 
     if (!updateResult.success) {
       return res.status(400).json({ message: updateResult.message });
+    }
+
+    // Pilot mode (adr-016): no swap order, no fee, no chat. The swap is recorded as a
+    // handover at a school collection day and both parents confirm it there.
+    if (isPilotMode()) {
+      return res.json({
+        message: pilotCollectionDay
+          ? `Swap request accepted. Hand the books over at the school collection day on ${pilotCollectionDay.date}, ${pilotCollectionDay.startTime} to ${pilotCollectionDay.endTime}. No fee applies.`
+          : "Swap request accepted. Hand the books over at the next collection day. No fee applies.",
+        collectionDay: pilotCollectionDay,
+        redirectUrl: "/swaps",
+      });
     }
 
     // Create a swap order (like Fiverr creates an order when a gig is purchased)

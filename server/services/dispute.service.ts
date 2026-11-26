@@ -11,6 +11,7 @@
  */
 
 import { db } from "../db";
+import { isAdminUser } from "../lib/roles";
 import {
   cycleDisputes,
   disputeMessages,
@@ -1105,8 +1106,9 @@ async function addTimelineEvent(event: {
 /**
  * Check if user is admin/mediator
  */
-export function isAdmin(userEmail: string): boolean {
-  return userEmail.endsWith('@kitabu.admin') || userEmail.includes('+admin@');
+export function isAdmin(user: { role?: string | null } | null | undefined): boolean {
+  // adr-018: admin rights come only from the stored role, never from the email address.
+  return isAdminUser(user);
 }
 
 /**

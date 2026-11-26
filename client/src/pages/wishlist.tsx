@@ -324,7 +324,7 @@ export default function WishlistPage() {
                     <CardTitle className="text-lg mb-2">{item.title}</CardTitle>
                     {item.child && (
                       <CardDescription className="mb-2">
-                        For: {item.child.name || `Child ${item.child.id}`} ({item.child.grade})
+                        For: {item.child.grade} slot
                       </CardDescription>
                     )}
                   </div>
@@ -553,6 +553,9 @@ export default function WishlistPage() {
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Any additional information..."
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Do not include your child's name.
+                </p>
               </div>
             </div>
             <DialogFooter className="mt-6">

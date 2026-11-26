@@ -1,16 +1,15 @@
 import { db } from "../db";
 import { users, children, type User, type CompleteOnboardingInput } from "server/db/schema";
 import { eq } from "drizzle-orm";
+import { consentRequirementError, hasCurrentConsent } from "../pilot/consent";
+import { CONSENT_VERSION } from "../config/pilot";
 
 export class OnboardingService {
-  async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string }> {
+  async completeOnboarding(userId: string, data: CompleteOnboardingInput): Promise<{ success: boolean; user?: User; message?: string; status?: number }> {
     try {
-      console.log('[OnboardingService] completeOnboarding called with data:', {
+      console.log('[OnboardingService] completeOnboarding called', {
         userId,
-        fullName: data.fullName,
-        phoneNumber: data.phoneNumber,
         childrenCount: data.children?.length || 0,
-        children: data.children,
       });
 
       // Get user's current email to check for admin role
@@ -22,8 +21,31 @@ export class OnboardingService {
         };
       }
 
-      // Determine role based on email (user already has email from login)
-      const role = currentUser.email.endsWith("@kitabu.admin") ? "ADMIN" : "PARENT";
+      // Parental consent is required to complete onboarding (adr-016, ODPC children's data guidance)
+      const markComplete = data.markAsComplete !== false;
+      const consentError = consentRequirementError({
+        markAsComplete: markComplete,
+        consentAccepted: data.consentAccepted,
+        existing: currentUser,
+      });
+      if (consentError) {
+        return { success: false, message: consentError };
+      }
+
+      // Child slots are only stored with valid, current consent (given now or already on
+      // record), regardless of markAsComplete.
+      const consentOk =
+        data.consentAccepted === true || hasCurrentConsent(currentUser, CONSENT_VERSION);
+      if (data.children && data.children.length > 0 && !consentOk) {
+        return {
+          success: false,
+          message: "Parental consent is required before child details can be saved.",
+        };
+      }
+
+      // adr-018: the role is never derived from the email address. Keep whatever role the
+      // account already has; ADMIN is granted only with scripts/set-admin-role.ts.
+      const role = currentUser.role === "ADMIN" ? "ADMIN" : "PARENT";
 
       // Update user with onboarding data (without school fields)
       const updateData: any = {
@@ -34,6 +56,13 @@ export class OnboardingService {
         onboardingCompleted: data.markAsComplete !== false, // Only mark complete if explicitly requested (defaults to true)
         updatedAt: new Date(),
       };
+
+      // Record consent when the checkbox was ticked (version-stamped, withdrawable later)
+      if (data.consentAccepted === true) {
+        updateData.consentGivenAt = new Date();
+        updateData.consentVersion = CONSENT_VERSION;
+        updateData.consentWithdrawnAt = null;
+      }
 
       // Only update phoneNumber if provided
       if (data.phoneNumber) {
@@ -63,21 +92,14 @@ export class OnboardingService {
 
         for (const child of data.children) {
           maxOrder += 1;
-          console.log('[OnboardingService] Inserting child:', {
-            parentId: userId,
-            name: child.name || null,
-            grade: child.grade,
-            schoolId: child.schoolId,
-            schoolName: child.schoolName,
-            displayOrder: maxOrder,
-          });
-
+          // Child slot only: grade + school (+ curriculum). No child name (adr-016).
           await db.insert(children).values({
             parentId: userId,
-            name: child.name || null,
+            name: null,
             grade: child.grade,
             schoolId: child.schoolId,
             schoolName: child.schoolName,
+            curriculum: child.curriculum || null,
             displayOrder: maxOrder,
           });
 
@@ -104,7 +126,20 @@ export class OnboardingService {
         user: updatedUser,
       };
     } catch (error) {
-      console.error("[OnboardingService] completeOnboarding error:", error);
+      // Phone number already used by another account (unique index users_phone_number_unique)
+      const e = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+      const code = e?.code ?? e?.cause?.code;
+      const text = `${e?.message ?? ""} ${e?.cause?.message ?? ""}`;
+      if (code === "ER_DUP_ENTRY" && /phone/i.test(text)) {
+        console.warn("[OnboardingService] duplicate phone number on onboarding");
+        return {
+          success: false,
+          status: 409,
+          message: "This phone number is already registered to another account.",
+        };
+      }
+      // Do not log the error object for DB errors: it can echo submitted values (phone number).
+      console.error("[OnboardingService] completeOnboarding error:", (error as { code?: string })?.code ?? "unknown");
       return {
         success: false,
         message: "Failed to complete onboarding. Please try again.",

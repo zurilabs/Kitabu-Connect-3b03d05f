@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -192,10 +193,12 @@ export default function Signup() {
 
           <div className="space-y-6 max-w-lg">
             <h1 className="text-4xl font-display font-bold leading-tight">
-              Join Kenya's trusted parent community for textbooks
+              Join the parent community for school textbooks
             </h1>
             <p className="text-lg text-white/90">
-              Buy and sell school textbooks safely. Connect with parents at your child's school. Secure escrow payments and verified community.
+              {PILOT_MODE
+                ? "Pass on and find used school textbooks with parents at your child's school. No fees. Pay the seller directly at handover."
+                : "Buy and sell school textbooks safely. Connect with parents at your child's school. Secure escrow payments and verified community."}
             </p>
 
             <div className="space-y-4 pt-4">
@@ -249,7 +252,7 @@ export default function Signup() {
             <h2 className="text-3xl font-display font-bold">Create Parent Account</h2>
             <p className="text-muted-foreground">
               {step === "email"
-                ? "Join the trusted community of Kenyan parents"
+                ? "Join the community of Kenyan parents"
                 : "Enter the verification code we sent you"}
             </p>
           </div>

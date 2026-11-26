@@ -5,15 +5,19 @@ import {
   varchar,
   timestamp,
   datetime,
+  date,
   boolean,
   decimal,
   int,
   text,
   index,
+  uniqueIndex,
   unique,
+  mysqlEnum,
 } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { isRealDate, isTodayOrFuture } from "../../pilot/dates";
 
 /* ================================
    USERS
@@ -50,6 +54,11 @@ export const users = mysqlTable(
     onboardingCompleted: boolean("onboarding_completed")
       .notNull()
       .default(false),
+
+    // Parental consent (ODPC children's data guidance; adr-016). Withdrawable.
+    consentGivenAt: timestamp("consent_given_at"),
+    consentVersion: varchar("consent_version", { length: 20 }),
+    consentWithdrawnAt: timestamp("consent_withdrawn_at"),
 
     walletBalance: decimal("wallet_balance", {
       precision: 10,
@@ -89,6 +98,8 @@ export const otpCodes = mysqlTable(
 
     expiresAt: timestamp("expires_at").notNull(),
     verified: boolean("verified").notNull().default(false),
+    // adr-018: wrong guesses against this code; the code is burned at OTP_MAX_ATTEMPTS.
+    attempts: int("attempts").notNull().default(0),
 
     createdAt: timestamp("created_at")
       .notNull()
@@ -100,6 +111,7 @@ export const otpCodes = mysqlTable(
       t.code
     ),
     expiresIdx: index("idx_otp_expires").on(t.expiresAt),
+    emailCreatedIdx: index("idx_otp_email_created").on(t.email, t.createdAt),
   })
 );
 
@@ -115,13 +127,15 @@ export const children = mysqlTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
 
-    name: varchar("name", { length: 255 }), // Optional: "John" or null
+    // Legacy. No longer collected or exposed (adr-016); existing values are kept, not dropped.
+    name: varchar("name", { length: 255 }),
     grade: varchar("grade", { length: 50 }).notNull(), // "Grade 5", "Form 2"
     displayOrder: int("display_order").notNull().default(0), // For manual reordering
 
     // School information for this child
     schoolId: varchar("school_id", { length: 36 }),
     schoolName: text("school_name"),
+    curriculum: varchar("curriculum", { length: 50 }), // "CBC" or "8-4-4"
 
     createdAt: timestamp("created_at")
       .notNull()
@@ -166,6 +180,9 @@ export const wishlistItems = mysqlTable(
     // Additional notes
     notes: text("notes"),
 
+    // Pilot (adr-016): set when this item was auto-built from a school booklist item.
+    booklistItemId: int("booklist_item_id"),
+
     // Status
     status: varchar("status", { length: 20 }).notNull().default("active"), // 'active', 'fulfilled', 'cancelled'
 
@@ -187,6 +204,8 @@ export const wishlistItems = mysqlTable(
     statusIdx: index("idx_wishlist_items_status").on(t.status),
     gradeSubjectIdx: index("idx_wishlist_items_grade_subject").on(t.grade, t.subject),
     titleIdx: index("idx_wishlist_items_title").on(t.title),
+    // One wishlist item per child per booklist item (NULL booklist_item_id rows are not constrained).
+    childBooklistItemUq: uniqueIndex("uq_wishlist_child_booklist_item").on(t.childId, t.booklistItemId),
   })
 );
 
@@ -303,6 +322,11 @@ export const bookListings = mysqlTable("book_listings", {
   condition: varchar("condition", { length: 20 }).notNull(),
   conditionNotes: text("condition_notes"),
 
+  // Pilot (adr-016): true if the book has writing in it. Workbook-style writing blocks listing in pilot mode.
+  writtenIn: boolean("written_in").notNull().default(false),
+  // School whose collection day this book is handed over at (defaults to the seller's first child slot school).
+  schoolId: varchar("school_id", { length: 36 }).references(() => schools.id, { onDelete: "set null" }),
+
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   originalRetailPrice: decimal("original_retail_price", { precision: 10, scale: 2 }),
 
@@ -334,6 +358,7 @@ expiresAt: datetime("expires_at"),
   statusCreatedIdx: index("idx_book_listings_status_created").on(t.listingStatus, t.createdAt),
   subjectIdx: index("idx_book_listings_subject").on(t.subject),
   gradeIdx: index("idx_book_listings_grade").on(t.classGrade),
+  schoolIdx: index("idx_book_listings_school").on(t.schoolId),
   conditionIdx: index("idx_book_listings_condition").on(t.condition),
   priceIdx: index("idx_book_listings_price").on(t.price),
   viewsIdx: index("idx_book_listings_views").on(t.viewsCount),
@@ -436,6 +461,9 @@ export const swapRequests = mysqlTable("swap_requests", {
   meetupLocation: text("meetup_location"),
   meetupTime: timestamp("meetup_time"),
   deliveryMethod: varchar("delivery_method", { length: 50 }).default("meetup"),
+
+  // Pilot (adr-016): the collection day at which this swap is handed over (no fee).
+  collectionDayId: int("collection_day_id"),
 
   // Confirmation
   requesterConfirmed: boolean("requester_confirmed").default(false),
@@ -964,11 +992,14 @@ export const completeOnboardingSchema = z.object({
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   children: z.array(z.object({
-    name: z.string().nullable().optional(),
+    // Child slot: grade + school (+ curriculum). No child name (adr-016).
     grade: z.string().min(1, "Grade is required"),
     schoolId: z.string().min(1, "School is required"),
     schoolName: z.string().min(1, "School name is required"),
+    curriculum: z.string().max(50).optional().nullable(),
   })).optional().default([]),
+  // Parental consent checkbox. Required when onboarding is marked complete (enforced in the service).
+  consentAccepted: z.boolean().optional(),
   markAsComplete: z.boolean().optional().default(true), // Whether to mark onboarding as complete
 });
 
@@ -1022,10 +1053,14 @@ const baseBookListingSchema = z.object({
   region: z.string().default("Kenyan"),
 
   // Condition & Pricing (Step 3)
-  condition: z.enum(["New", "Like New", "Good", "Fair"], {
+  condition: z.enum(["New", "Like New", "Good", "Fair", "Worn"], {
     required_error: "Condition is required",
   }),
   conditionNotes: z.string().nullable().optional(),
+  // Pilot (adr-016): books with writing in them cannot be listed in pilot mode.
+  writtenIn: z.boolean().default(false),
+  // Collection school; defaults server-side to the seller's first child slot school.
+  schoolId: z.string().nullable().optional(),
 
   // Listing Type - "sell" or "swap"
   listingType: z.enum(["sell", "swap"]).default("sell"),
@@ -1116,6 +1151,8 @@ export const createSwapRequestSchema = z.object({
   message: z.string().optional(),
   deliveryMethod: z.enum(["meetup", "delivery"]).default("meetup"),
   meetupLocation: z.string().optional(),
+  // Pilot (adr-016): handover recorded at a school collection day
+  collectionDayId: z.number().int().positive().optional(),
 }).refine((data) => {
   // Either offeredListingId OR manual book details must be provided
   if (data.offeredListingId) {
@@ -1129,6 +1166,7 @@ export const createSwapRequestSchema = z.object({
 });
 
 export const updateSwapRequestSchema = z.object({
+  collectionDayId: z.number().int().positive().optional(),
   status: z.enum(["pending", "accepted", "rejected", "completed", "cancelled"]).optional(),
   meetupLocation: z.string().optional(),
   meetupTime: z.string().optional(),
@@ -1904,17 +1942,18 @@ export type Child = typeof children.$inferSelect;
 
 // Children Schemas
 export const createChildSchema = z.object({
-  name: z.string().min(1).max(255).nullable().optional(),
+  // No child name (adr-016). Unknown keys such as "name" are stripped by zod.
   grade: z.string().min(1, "Grade is required"),
   schoolId: z.string().optional().nullable(),
   schoolName: z.string().optional().nullable(),
+  curriculum: z.string().max(50).optional().nullable(),
 });
 
 export const updateChildSchema = z.object({
-  name: z.string().min(1).max(255).nullable().optional(),
   grade: z.string().optional(),
   schoolId: z.string().optional().nullable(),
   schoolName: z.string().optional().nullable(),
+  curriculum: z.string().max(50).optional().nullable(),
   displayOrder: z.number().optional(),
 });
 
@@ -1961,3 +2000,217 @@ export const updateWishlistItemSchema = z.object({
 
 export type CreateWishlistItemInput = z.infer<typeof createWishlistItemSchema>;
 export type UpdateWishlistItemInput = z.infer<typeof updateWishlistItemSchema>;
+
+
+/* ================================
+   SCHOOL BOOKLISTS (pilot, adr-016)
+   One booklist per school x grade x year x source.
+================================ */
+export const schoolBooklists = mysqlTable(
+  "school_booklists",
+  {
+    id: int("id").primaryKey().autoincrement(),
+
+    schoolId: varchar("school_id", { length: 36 })
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+
+    grade: varchar("grade", { length: 50 }).notNull(), // "Grade 5"
+    year: int("year").notNull(), // e.g. 2027
+    source: varchar("source", { length: 50 }).notNull().default("school-issued"),
+
+    createdBy: varchar("created_by", { length: 36 }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    schoolGradeYearIdx: index("idx_school_booklists_school_grade_year").on(
+      t.schoolId,
+      t.grade,
+      t.year
+    ),
+    uniqueBooklist: unique("uq_school_booklists_school_grade_year_source").on(
+      t.schoolId,
+      t.grade,
+      t.year,
+      t.source
+    ),
+  })
+);
+
+export const schoolBooklistItems = mysqlTable(
+  "school_booklist_items",
+  {
+    id: int("id").primaryKey().autoincrement(),
+
+    booklistId: int("booklist_id")
+      .notNull()
+      .references(() => schoolBooklists.id, { onDelete: "cascade" }),
+
+    title: varchar("title", { length: 500 }).notNull(),
+    subject: varchar("subject", { length: 100 }),
+    publisher: varchar("publisher", { length: 255 }),
+    isbn: varchar("isbn", { length: 20 }),
+
+    // Only KICD-approved titles are matched in the pilot.
+    kicdApproved: boolean("kicd_approved").notNull().default(false),
+    // false for workbooks, activity books and assessment books (not reusable).
+    reusable: boolean("reusable").notNull().default(true),
+
+    listPriceKes: decimal("list_price_kes", { precision: 10, scale: 2 }),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    booklistIdx: index("idx_school_booklist_items_booklist").on(t.booklistId),
+  })
+);
+
+/* ================================
+   COLLECTION DAYS (pilot, adr-016)
+   A Saturday handover table at the school gate.
+================================ */
+export const collectionDays = mysqlTable(
+  "collection_days",
+  {
+    id: int("id").primaryKey().autoincrement(),
+
+    schoolId: varchar("school_id", { length: 36 })
+      .notNull()
+      .references(() => schools.id, { onDelete: "cascade" }),
+
+    date: date("date", { mode: "string" }).notNull(), // YYYY-MM-DD
+    startTime: varchar("start_time", { length: 5 }).notNull(), // HH:MM (24h, EAT)
+    endTime: varchar("end_time", { length: 5 }).notNull(),
+    venueNote: text("venue_note"),
+
+    // 'scheduled' | 'completed' | 'cancelled'
+    status: varchar("status", { length: 20 }).notNull().default("scheduled"),
+
+    createdBy: varchar("created_by", { length: 36 }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    schoolDateIdx: index("idx_collection_days_school_date").on(t.schoolId, t.date),
+    statusIdx: index("idx_collection_days_status").on(t.status),
+  })
+);
+
+export type SchoolBooklist = typeof schoolBooklists.$inferSelect;
+export type SchoolBooklistItem = typeof schoolBooklistItems.$inferSelect;
+export type CollectionDay = typeof collectionDays.$inferSelect;
+
+/* ================================
+   LISTING RESERVATIONS (adr-017)
+================================ */
+export const listingReservations = mysqlTable(
+  "listing_reservations",
+  {
+    id: int("id").primaryKey().autoincrement(),
+    listingId: int("listing_id")
+      .notNull()
+      .references(() => bookListings.id, { onDelete: "cascade" }),
+    buyerId: varchar("buyer_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sellerId: varchar("seller_id", { length: 36 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    collectionDayId: int("collection_day_id").references(() => collectionDays.id, {
+      onDelete: "set null",
+    }),
+    status: mysqlEnum("status", ["reserved", "cancelled", "completed"]).notNull().default("reserved"),
+    buyerConfirmed: boolean("buyer_confirmed").notNull().default(false),
+    sellerConfirmed: boolean("seller_confirmed").notNull().default(false),
+    cancelledBy: varchar("cancelled_by", { length: 36 }).references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => ({
+    listingStatusIdx: index("idx_listing_reservations_listing_status").on(t.listingId, t.status),
+    buyerStatusIdx: index("idx_listing_reservations_buyer_status").on(t.buyerId, t.status),
+    sellerStatusIdx: index("idx_listing_reservations_seller_status").on(t.sellerId, t.status),
+  })
+);
+
+export type ListingReservation = typeof listingReservations.$inferSelect;
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+export const booklistItemInputSchema = z.object({
+  title: z.string().min(2, "Title is required").max(500),
+  subject: z.string().max(100).optional().nullable(),
+  publisher: z.string().max(255).optional().nullable(),
+  isbn: z.string().max(20).optional().nullable(),
+  kicdApproved: z.boolean().default(false),
+  reusable: z.boolean().default(true),
+  listPriceKes: z.number().min(0).optional().nullable(),
+});
+
+export const createBooklistSchema = z.object({
+  schoolId: z.string().min(1, "School is required"),
+  grade: z.string().min(1, "Grade is required"),
+  year: z.number().int().min(2024).max(2100),
+  source: z.string().min(1).max(50).default("school-issued"),
+  items: z.array(booklistItemInputSchema).max(200).optional(),
+});
+
+export const bulkAddBooklistItemsSchema = z.object({
+  items: z.array(booklistItemInputSchema).min(1, "At least one item").max(200),
+});
+
+export const createCollectionDaySchema = z
+  .object({
+    schoolId: z.string().min(1, "School is required"),
+    date: z
+      .string()
+      .regex(YMD, "Date must be YYYY-MM-DD")
+      .refine(isRealDate, "Date is not a real calendar date")
+      .refine((d) => isTodayOrFuture(d), "Collection day cannot be in the past"),
+    startTime: z.string().regex(HHMM, "Start time must be HH:MM"),
+    endTime: z.string().regex(HHMM, "End time must be HH:MM"),
+    venueNote: z.string().max(1000).optional().nullable(),
+    status: z.enum(["scheduled", "completed", "cancelled"]).default("scheduled"),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "End time must be after start time",
+    path: ["endTime"],
+  });
+
+/** Admin edit of a collection day: status, time or venue (e.g. cancel a day). */
+export const updateCollectionDaySchema = z
+  .object({
+    status: z.enum(["scheduled", "completed", "cancelled"]).optional(),
+    startTime: z.string().regex(HHMM, "Start time must be HH:MM").optional(),
+    endTime: z.string().regex(HHMM, "End time must be HH:MM").optional(),
+    venueNote: z.string().max(1000).optional().nullable(),
+  })
+  .refine((d) => Object.keys(d).length > 0, { message: "Nothing to update" })
+  .refine((d) => !(d.startTime && d.endTime) || d.endTime > d.startTime, {
+    message: "End time must be after start time",
+    path: ["endTime"],
+  });
+
+export type UpdateCollectionDayInput = z.infer<typeof updateCollectionDaySchema>;
+export type BooklistItemInput = z.infer<typeof booklistItemInputSchema>;
+export type CreateBooklistInput = z.infer<typeof createBooklistSchema>;
+export type CreateCollectionDayInput = z.infer<typeof createCollectionDaySchema>;

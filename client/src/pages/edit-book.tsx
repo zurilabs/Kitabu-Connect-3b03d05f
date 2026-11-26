@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PILOT_MODE } from "@/config/pilot";
 import { Link, useLocation, useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +62,7 @@ interface FormData {
   willingToSwapFor?: string;
 
   // Pricing & Condition
-  condition: "New" | "Like New" | "Good" | "Fair" | "";
+  condition: "New" | "Like New" | "Good" | "Fair" | "Worn" | "";
   conditionNotes?: string;
   price: string;
   originalRetailPrice?: string;
@@ -221,7 +222,7 @@ export default function EditBook() {
       price: Number(formData.price),
       originalRetailPrice: formData.originalRetailPrice ? Number(formData.originalRetailPrice) : undefined,
       publicationYear: formData.publicationYear,
-      condition: formData.condition as "New" | "Like New" | "Good" | "Fair",
+      condition: formData.condition as "New" | "Like New" | "Good" | "Fair" | "Worn",
     };
 
     updateListing.mutate(
@@ -585,6 +586,7 @@ export default function EditBook() {
                           <SelectItem value="Like New">Like New (No markings, minimal wear)</SelectItem>
                           <SelectItem value="Good">Good (Some wear, readable)</SelectItem>
                           <SelectItem value="Fair">Fair (Highlighted, noticeable wear)</SelectItem>
+                          <SelectItem value="Worn">Worn (Heavy wear, still complete and usable)</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -722,7 +724,7 @@ export default function EditBook() {
                       />
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <Camera className="w-3 h-3" />
-                        Add photos of the spine, back cover, or any damage. Clear photos sell 50% faster.
+                        Add photos of the spine, back cover, or any damage. Clear photos help your book sell.
                       </p>
                     </div>
                   </div>
@@ -848,10 +850,13 @@ export default function EditBook() {
                   Pricing Guide
                 </h3>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Books in "Good" condition typically sell for 40-60% of the original retail price.
+                  Books in "Good" condition are usually priced at 40 to 60% of the original retail price.
                 </p>
                 <div className="text-xs bg-muted p-2 rounded">
-                  <span className="font-medium">Platform Fee:</span> 12% is deducted only when the book sells.
+                  <span className="font-medium">Fees:</span>{" "}
+                  {PILOT_MODE
+                    ? "No fees in the pilot. Pay the other parent directly at handover."
+                    : "A platform fee is deducted only when the book sells."}
                 </div>
               </CardContent>
             </Card>

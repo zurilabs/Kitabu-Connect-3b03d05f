@@ -10,6 +10,9 @@ import { SchoolCombobox } from "@/components/ui/school-combobox";
 import { useActiveChild, type Child } from "@/contexts/ActiveChildContext";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Edit, Trash2, GripVertical, Users } from "lucide-react";
+import { PILOT_MODE } from "@/config/pilot";
+import { ConsentBanner } from "@/components/pilot/ConsentBanner";
+import { isConsentRequiredError, throwForFailedResponse } from "@/lib/consentError";
 
 const GRADES = [
   "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6",
@@ -21,35 +24,41 @@ export function ChildrenManagement() {
   const { children, refetchChildren } = useActiveChild();
   const { toast } = useToast();
 
+  const [consentNeeded, setConsentNeeded] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingChild, setEditingChild] = useState<Child | null>(null);
-  const [childForm, setChildForm] = useState({ name: "", grade: "", schoolId: "", schoolName: "" });
+  const [childForm, setChildForm] = useState({ grade: "", schoolId: "", schoolName: "" });
 
   // Create child mutation
   const createChild = useMutation({
-    mutationFn: async (data: { name: string | null; grade: string; schoolId: string | null; schoolName: string | null }) => {
+    mutationFn: async (data: { grade: string; schoolId: string | null; schoolName: string | null }) => {
       const response = await fetch("/api/children", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          name: data.name || null,
           grade: data.grade,
           schoolId: data.schoolId || null,
           schoolName: data.schoolName || null,
         }),
       });
-      if (!response.ok) throw new Error("Failed to create child");
+      if (!response.ok) await throwForFailedResponse(response, "Failed to create child");
       return response.json();
     },
     onSuccess: () => {
       toast({ title: "Child Added", description: "Successfully added child to your profile" });
       refetchChildren();
       setIsAddDialogOpen(false);
-      setChildForm({ name: "", grade: "", schoolId: "", schoolName: "" });
+      setChildForm({ grade: "", schoolId: "", schoolName: "" });
     },
     onError: (error: any) => {
+      if (isConsentRequiredError(error)) {
+        setConsentNeeded(true);
+        setIsAddDialogOpen(false);
+        setIsEditDialogOpen(false);
+        return;
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -63,7 +72,7 @@ export function ChildrenManagement() {
         credentials: "include",
         body: JSON.stringify(data),
       });
-      if (!response.ok) throw new Error("Failed to update child");
+      if (!response.ok) await throwForFailedResponse(response, "Failed to update child");
       return response.json();
     },
     onSuccess: () => {
@@ -73,6 +82,12 @@ export function ChildrenManagement() {
       setEditingChild(null);
     },
     onError: (error: any) => {
+      if (isConsentRequiredError(error)) {
+        setConsentNeeded(true);
+        setIsAddDialogOpen(false);
+        setIsEditDialogOpen(false);
+        return;
+      }
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
@@ -101,8 +116,11 @@ export function ChildrenManagement() {
       toast({ title: "Missing Grade", description: "Please select a grade", variant: "destructive" });
       return;
     }
+    if (PILOT_MODE && !childForm.schoolId) {
+      toast({ title: "Missing School", description: "Please select the school so we can build the booklist", variant: "destructive" });
+      return;
+    }
     createChild.mutate({
-      name: childForm.name || null,
       grade: childForm.grade,
       schoolId: childForm.schoolId || null,
       schoolName: childForm.schoolName || null,
@@ -112,7 +130,6 @@ export function ChildrenManagement() {
   const handleEditChild = (child: Child) => {
     setEditingChild(child);
     setChildForm({
-      name: child.name || "",
       grade: child.grade,
       schoolId: child.schoolId || "",
       schoolName: child.schoolName || "",
@@ -125,7 +142,6 @@ export function ChildrenManagement() {
     updateChild.mutate({
       id: editingChild.id,
       data: {
-        name: childForm.name || null,
         grade: childForm.grade,
         schoolId: childForm.schoolId || null,
         schoolName: childForm.schoolName || null,
@@ -141,6 +157,7 @@ export function ChildrenManagement() {
 
   return (
     <>
+      {consentNeeded && <ConsentBanner force />}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -219,22 +236,10 @@ export function ChildrenManagement() {
           <DialogHeader>
             <DialogTitle>Add Child</DialogTitle>
             <DialogDescription>
-              Add a child to your profile to get personalized recommendations
+              Add a child slot: just the grade and school, no name needed
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="child-name">Child's Name (Optional)</Label>
-              <Input
-                id="child-name"
-                placeholder="e.g., John"
-                value={childForm.name}
-                onChange={(e) => setChildForm({ ...childForm, name: e.target.value })}
-              />
-              <p className="text-xs text-muted-foreground">
-                Leave blank to use "Child 1", "Child 2", etc.
-              </p>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="child-grade">Grade *</Label>
               <Select value={childForm.grade} onValueChange={(value) => setChildForm({ ...childForm, grade: value })}>
@@ -287,15 +292,6 @@ export function ChildrenManagement() {
             <DialogDescription>Update your child's information</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-child-name">Child's Name (Optional)</Label>
-              <Input
-                id="edit-child-name"
-                placeholder="e.g., John"
-                value={childForm.name}
-                onChange={(e) => setChildForm({ ...childForm, name: e.target.value })}
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-child-grade">Grade *</Label>
               <Select value={childForm.grade} onValueChange={(value) => setChildForm({ ...childForm, grade: value })}>

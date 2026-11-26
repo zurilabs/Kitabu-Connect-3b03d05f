@@ -27,10 +27,16 @@ export interface SendEmailParams {
 export async function sendEmail({ to, subject, html }: SendEmailParams): Promise<{ success: boolean; error?: string }> {
   // In development mode or if email is not configured, just log the email
   if (process.env.NODE_ENV === "development" || !isEmailConfigured) {
-    console.log(`\n📧 [EMAIL ${process.env.NODE_ENV === "development" ? "Dev Mode" : "SKIPPED - Not Configured"}]`);
-    console.log(`To: ${to}`);
-    console.log(`Subject: ${subject}`);
-    console.log(`HTML: ${html}\n`);
+    // Recipient and body (which can hold OTP codes) are printed only in local development,
+    // never in other environments where logs may be retained.
+    if (process.env.NODE_ENV === "development") {
+      console.log(`\n📧 [EMAIL Dev Mode]`);
+      console.log(`To: ${to}`);
+      console.log(`Subject: ${subject}`);
+      console.log(`HTML: ${html}\n`);
+    } else {
+      console.log(`📧 [EMAIL SKIPPED - Not Configured] subject: ${subject}`);
+    }
 
     if (!isEmailConfigured) {
       console.warn('⚠️ Resend API key not configured. Emails will not be sent in production!');

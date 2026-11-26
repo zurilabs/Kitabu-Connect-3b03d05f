@@ -1,3 +1,4 @@
+import { PILOT_MODE } from "@/config/pilot";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { BookCard } from "@/components/ui/book-card";
 import { Input } from "@/components/ui/input";
@@ -285,7 +286,7 @@ export default function Marketplace() {
   ], []);
 
   // Condition options
-  const conditions = ["Like New", "Good", "Fair", "Acceptable"];
+  const conditions = ["Like New", "Good", "Fair", "Worn", "Acceptable"];
 
   // Sort options
   const sortOptions = [
@@ -405,7 +406,7 @@ export default function Marketplace() {
     <div className="min-h-screen bg-muted/10 pb-20">
       <PageMeta
         title="Marketplace - Browse Affordable School Textbooks"
-        description="Browse thousands of affordable used textbooks in Kenya. CBC, 8-4-4, IGCSE and IB curriculum books. Filter by grade, subject, condition and price. Secure escrow payments."
+        description={PILOT_MODE ? "Browse used school textbooks from families at schools near you. CBC and 8-4-4 books. Filter by grade, subject, condition and price. No fees." : "Browse thousands of affordable used textbooks in Kenya. CBC, 8-4-4, IGCSE and IB curriculum books. Filter by grade, subject, condition and price. Secure escrow payments."}
         keywords="buy textbooks Kenya, used textbooks marketplace, CBC books for sale, 8-4-4 textbooks, IGCSE books Kenya, IB textbooks, affordable school books"
       />
 

@@ -14,6 +14,8 @@ import { Link, useLocation, useSearch } from "wouter";
 import { TopUpDialog } from "@/components/wallet/TopUpDialog";
 import { WithdrawDialog } from "@/components/wallet/WithdrawDialog";
 import { useQuery } from "@tanstack/react-query";
+import { PILOT_MODE, PILOT_PAYMENT_NOTICE } from "@/config/pilot";
+import { ConsentBanner } from "@/components/pilot/ConsentBanner";
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("listings");
@@ -29,6 +31,7 @@ export default function Dashboard() {
   // Fetch referral data
   const { data: referralData, isLoading: isLoadingReferral, error: referralError } = useQuery({
     queryKey: ["referral-code"],
+    enabled: !PILOT_MODE, // referrals are deferred in pilot mode (adr-016)
     queryFn: async () => {
       const response = await fetch("/api/referrals/my-code", {
         credentials: "include",
@@ -170,6 +173,7 @@ export default function Dashboard() {
 
   return (
     <div className="container px-4 py-8 max-w-7xl mx-auto">
+      <ConsentBanner />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         {/* Profile Summary */}
         <Card className="lg:col-span-1">
@@ -185,6 +189,17 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {PILOT_MODE && (
+              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 text-sm">
+                <div className="font-medium mb-1">How payment works</div>
+                <p className="text-muted-foreground">{PILOT_PAYMENT_NOTICE}</p>
+                <Button asChild size="sm" className="w-full mt-3">
+                  <Link href="/booklist">My child's 2027 booklist</Link>
+                </Button>
+              </div>
+            )}
+
+            {!PILOT_MODE && (
             <div className="p-4 bg-primary/5 rounded-xl border border-primary/10">
               <div className="flex items-center gap-2 text-muted-foreground mb-1">
                 <Wallet className="w-4 h-4" />
@@ -202,6 +217,7 @@ export default function Dashboard() {
                 </Button>
               </div>
             </div>
+            )}
 
             {/* Referral Section */}
             {referralData?.referralCode && (
@@ -237,7 +253,7 @@ export default function Dashboard() {
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(
@@ -258,7 +274,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(
@@ -279,7 +295,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
                         const referralLink = `${window.location.origin}/signup?ref=${referralData.referralCode}`;
                         const message = `Parents, let's stop overpaying for textbooks every year!
 
-I've found a way to cut our school book costs by 60% using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
+I've found a way to cut our school book costs using Kitabu Connect. It's a verified platform for local peer-to-peer swaps. The best part? You can actually make extra income by renting or selling the books your kids have outgrown to other parents in your area.
 
 It's stress-free and turns your old textbooks into cash for the new ones. Join me here: ${referralLink}`;
                         window.open(
@@ -326,6 +342,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
               <p className="text-xs text-muted-foreground mt-1">Books for sale</p>
             </CardContent>
           </Card>
+          {!PILOT_MODE && (
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Sales</CardTitle>
@@ -335,6 +352,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
               <p className="text-xs text-muted-foreground mt-1">From sold books</p>
             </CardContent>
           </Card>
+          )}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Books</CardTitle>
@@ -361,7 +379,7 @@ It's stress-free and turns your old textbooks into cash for the new ones. Join m
       <Tabs defaultValue="listings" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="listings">My Listings</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          {!PILOT_MODE && <TabsTrigger value="transactions">Transactions</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="listings">

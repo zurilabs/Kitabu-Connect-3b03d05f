@@ -16,6 +16,8 @@
  * - Above KES 1,000,000: KES 350
  */
 
+import { isPilotMode } from "../config/pilot";
+
 export type WithdrawalMethod = 'mpesa' | 'bank';
 
 export interface WithdrawalFeeBreakdown {
@@ -63,6 +65,9 @@ export function calculateWithdrawalFee(
   amount: number,
   method: WithdrawalMethod = 'mpesa'
 ): number {
+  // Pilot mode (adr-016): no wallet, no withdrawals, no withdrawal fee.
+  if (isPilotMode()) return 0;
+
   if (method === 'mpesa') {
     return calculateMpesaWithdrawalFee(amount);
   } else {

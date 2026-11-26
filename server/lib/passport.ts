@@ -41,6 +41,16 @@ if (!isGoogleConfigured) {
             return done(new Error('No email found in Google profile'), undefined);
           }
 
+          // adr-018: accounts are linked by email, so only accept an email Google has verified.
+          const emailEntry = profile.emails?.[0] as { value: string; verified?: boolean | string } | undefined;
+          const jsonVerified = (profile as { _json?: { email_verified?: boolean | string } })._json?.email_verified;
+          const isVerified =
+            emailEntry?.verified === true || emailEntry?.verified === 'true' ||
+            jsonVerified === true || jsonVerified === 'true';
+          if (!isVerified) {
+            return done(new Error('Google email address is not verified'), undefined);
+          }
+
           // Authenticate or create user
           const result = await authService.authenticateWithGoogle(
             googleId,
